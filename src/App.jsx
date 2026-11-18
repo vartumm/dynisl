@@ -1,0 +1,349 @@
+import React, { useState, useEffect, useRef } from 'react';
+import MainIsland from './components/MainIsland';
+import CallMiniIsland from './components/CallMiniIsland';
+import { ISLAND_THEMES } from './styles/islandThemes';
+import { fetchLyrics, getActiveLineIndex } from './services/lyricsService';
+import { notificationManager } from './services/notificationService';
+
+export default function App() {
+  // Settings
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dynisl_settings');
+      return saved ? JSON.parse(saved) : {
+        themeId: 'liquid-glass',
+        autoHideFullscreen: true,
+        layoutFixerEnabled: true,
+        layoutAutoReplace: true,
+        clipboardHookEnabled: true,
+        showDate: true,
+        customColor: '#0f172a',
+        customAccent: '#38bdf8'
+      };
+    } catch {
+      return {
+        themeId: 'liquid-glass',
+        autoHideFullscreen: true,
+        layoutFixerEnabled: true,
+        layoutAutoReplace: true,
+        clipboardHookEnabled: true,
+        showDate: true
+      };
+    }
+  });
+
+  const updateSettings = (partial) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...partial };
+      try {
+        localStorage.setItem('dynisl_settings', JSON.stringify(updated));
+      } catch { }
+      return updated;
+    });
+  };
+
+  // Views & States
+  const [activeView, setActiveView] = useState('idle');
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
+
+  // Music state
+  const [musicInfo, setMusicInfo] = useState({
+    HasSession: false,
+    Title: '',
+    Artist: '',
+    Album: '',
+    ThumbnailBase64: '',
+    Status: 'Stopped',
+    PositionMs: 0,
+    DurationMs: 0,
+    AppId: '',
+    IsAd: false
+  });
+  const [lyricsData, setLyricsData] = useState(null);
+  const [currentPosMs, setCurrentPosMs] = useState(0);
+
+  // Call / Secondary Island state
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [isCallDismissed, setIsCallDismissed] = useState(false);
+  const [callApp, setCallApp] = useState('discord');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [micPeak, setMicPeak] = useState(0);
+
+  // Clipboard state
+  const [clipboardItems, setClipboardItems] = useState([]);
+
+  // File shelf state
+  const [absorbedFiles, setAbsorbedFiles] = useState([]);
+
+  // Notifications
+  const [currentNotification, setCurrentNotification] = useState(null);
+
+  // Layout Fixer toast
+  const [layoutFixData, setLayoutFixData] = useState(null);
+
+  // Track lyrics fetching
+  const lastTrackKeyRef = useRef('');
+
+  useEffect(() => {
+    if (!musicInfo?.Title || musicInfo?.IsAd) {
+      setLyricsData(null);
+      return;
+    }
+
+    const key = `${musicInfo.Artist}-${musicInfo.Title}`;
+    if (key !== lastTrackKeyRef.current) {
+      lastTrackKeyRef.current = key;
+      fetchLyrics(musicInfo.Title, musicInfo.Artist, musicInfo.DurationMs / 1000).then((res) => {
+        setLyricsData(res);
+      });
+    }
+  }, [musicInfo?.Title, musicInfo?.Artist, musicInfo?.DurationMs, musicInfo?.IsAd]);
+
+  // Interpolate music position for compact lyrics
+  useEffect(() => {
+    setCurrentPosMs(musicInfo?.PositionMs || 0);
+  }, [musicInfo?.PositionMs]);
+
+  useEffect(() => {
+    if (musicInfo?.Status !== 'Playing' || musicInfo?.IsAd) return;
+    const interval = setInterval(() => {
+      setCurrentPosMs((prev) => {
+        if (musicInfo?.DurationMs > 0 && prev >= musicInfo.DurationMs) return prev;
+        return prev + 500;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [musicInfo?.Status, musicInfo?.DurationMs, musicInfo?.IsAd]);
+
+  // Compute active lyric line for compact mode (with +0.2s vocal calibration)
+  let currentLyricLine = '';
+  if (lyricsData?.synced && lyricsData?.lines?.length > 0 && !musicInfo?.IsAd) {
+    const activeIdx = getActiveLineIndex(lyricsData.lines, (currentPosMs / 1000) + 0.2);
+    if (activeIdx >= 0 && lyricsData.lines[activeIdx]) {
+      currentLyricLine = lyricsData.lines[activeIdx].text;
+    }
+  }
+
+  // IPC Event listener from DynislCore
+  useEffect(() => {
+    if (!window.dynislAPI) return;
+
+    window.dynislAPI.sendCommand('get_state');
+
+    const unsubscribe = window.dynislAPI.onCoreEvent((payload) => {
+      if (!payload) return;
+      const { type, data } = payload;
+
+      switch (type) {
+        case 'media':
+          setMusicInfo(data);
+          break;
+
+        case 'mic_peak':
+          setMicPeak(data.peak);
+          setIsSpeaking(data.isSpeaking);
+          setIsMuted(data.isMuted);
+          break;
+
+        case 'call_status':
+          if (data && typeof data.active === 'boolean') {
+            setIsCallActive(data.active);
+            if (!data.active) {
+              setIsCallDismissed(false); // Reset dismissed state when call actually ends
+            }
+            if (data.app) setCallApp(data.app);
+          }
+          break;
+
+        case 'notification':
+          if (data) {
+            setCurrentNotification(data);
+            setIsHidden(false);
+            setTimeout(() => {
+              setCurrentNotification((cur) => (cur?.id === data.id ? null : cur));
+            }, 6000);
+          }
+          break;
+
+        case 'fullscreen':
+          if (settings.autoHideFullscreen) {
+            setIsHidden(Boolean(data?.isFullscreen));
+          }
+          break;
+
+        case 'manual_hide_toggle':
+          setIsHidden(Boolean(data?.isHidden));
+          break;
+
+        case 'layout_corrected':
+          setLayoutFixData(data);
+          setTimeout(() => setLayoutFixData(null), 3500);
+          break;
+
+        case 'win_v':
+        case 'open_clipboard':
+          setActiveView('clipboard');
+          setIsHidden(false);
+          break;
+
+        case 'clipboard':
+          if (Array.isArray(data)) {
+            setClipboardItems(data);
+          }
+          break;
+
+        default:
+          break;
+      }
+    });
+
+    const unsubNotifs = notificationManager.subscribe((list) => {
+      if (list.length > 0) {
+        setCurrentNotification(list[0]);
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+      unsubNotifs?.();
+    };
+  }, [settings.autoHideFullscreen]);
+
+  // Compute Active Theme
+  const themeObj = ISLAND_THEMES[settings.themeId] || ISLAND_THEMES['liquid-glass'];
+  const theme = {
+    ...themeObj,
+    style: typeof themeObj.style === 'function'
+      ? themeObj.style(settings.customColor, settings.customAccent)
+      : themeObj.style
+  };
+
+  const isMusicPlaying = musicInfo?.Status === 'Playing';
+
+  // Commands to Core
+  const handlePlayPause = () => window.dynislAPI?.sendCommand('media_play_pause');
+  const handleNext = () => window.dynislAPI?.sendCommand('media_next');
+  const handlePrev = () => window.dynislAPI?.sendCommand('media_prev');
+  const handleSeek = (posMs) => window.dynislAPI?.sendCommand('media_seek', { positionMs: Math.round(posMs) });
+  const handleToggleMute = () => window.dynislAPI?.sendCommand('mic_set_mute', { mute: !isMuted });
+  const handleSelectItem = (text) => {
+    window.dynislAPI?.sendCommand('clipboard_set', { text });
+    window.dynislAPI?.copyToClipboard(text);
+  };
+  const handlePinItem = (id) => window.dynislAPI?.sendCommand('clipboard_pin', { id });
+  const handleRemoveItem = (id) => window.dynislAPI?.sendCommand('clipboard_remove', { id });
+  const handleClearClipboard = () => window.dynislAPI?.sendCommand('clipboard_clear');
+
+  const handleDropFiles = (files) => {
+    setAbsorbedFiles((prev) => [...files, ...prev]);
+    setActiveView('files');
+    setIsHidden(false);
+  };
+
+  const handleRemoveFile = (id) => {
+    setAbsorbedFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleClearFiles = () => {
+    setAbsorbedFiles([]);
+  };
+
+  const handleEndCall = () => {
+    setIsCallDismissed(true);
+    window.dynislAPI?.sendCommand('call_disconnect', { app: callApp });
+  };
+
+  const showCallMini = isCallActive && !isCallDismissed;
+
+  // Sync callActive & isHidden state to main process for mouse bounds
+  useEffect(() => {
+    window.dynislAPI?.updateIslandBounds({
+      callActive: showCallMini,
+      isHidden
+    });
+  }, [showCallMini, isHidden]);
+
+  // Seamless hover tracking: when cursor is over any interactive element, disable mouse passthrough
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (isHidden) {
+        window.dynislAPI?.setIgnoreMouseEvents(true);
+        return;
+      }
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const isInteractive = Boolean(
+        el && (
+          el.closest('.island-interactive') ||
+          el.closest('.island-capsule')
+        )
+      );
+      window.dynislAPI?.setIgnoreMouseEvents(!isInteractive);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [isHidden]);
+
+  return (
+    <div className="island-stage">
+      {/* Main Island Container */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          position: 'relative',
+          transform: isHidden ? 'translateY(-140%)' : 'translateY(0)',
+          transition: 'transform 0.44s cubic-bezier(0.22, 1.25, 0.36, 1)',
+          pointerEvents: isHidden ? 'none' : 'auto'
+        }}
+      >
+        {/* Main Island Capsule */}
+        <MainIsland
+          activeView={activeView}
+          setActiveView={setActiveView}
+          settings={settings}
+          onUpdateSettings={updateSettings}
+          theme={theme}
+          musicInfo={musicInfo}
+          lyricsData={lyricsData}
+          currentLyricLine={currentLyricLine}
+          clipboardItems={clipboardItems}
+          absorbedFiles={absorbedFiles}
+          currentNotification={currentNotification}
+          layoutFixData={layoutFixData}
+          onDismissNotification={() => setCurrentNotification(null)}
+          onDismissLayoutFix={() => setLayoutFixData(null)}
+          onPlayPause={handlePlayPause}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          onSeek={handleSeek}
+          onSelectItem={handleSelectItem}
+          onPinItem={handlePinItem}
+          onRemoveItem={handleRemoveItem}
+          onClearClipboard={handleClearClipboard}
+          onRemoveFile={handleRemoveFile}
+          onClearFiles={handleClearFiles}
+          onDropFiles={handleDropFiles}
+          isMusicPlaying={isMusicPlaying}
+          isLyricsOpen={isLyricsOpen}
+          setIsLyricsOpen={setIsLyricsOpen}
+        />
+
+        {/* Secondary Call Mini-Island (Discord / Telegram) */}
+        {showCallMini && (
+          <div style={{ marginTop: '7px' }}>
+            <CallMiniIsland
+              isCallActive={showCallMini}
+              isSpeaking={isSpeaking}
+              theme={theme}
+              appType={callApp}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

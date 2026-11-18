@@ -1,0 +1,193 @@
+@charset "UTF-8";
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #ffffff;
+}
+
+/* Base Stage */
+.island-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* Interactive elements opt back into pointer events */
+.island-interactive {
+  pointer-events: auto !important;
+}
+
+/* Water Droplet Liquid Capsule */
+.island-capsule {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 9999px;
+  overflow: hidden;
+  transition: width 0.44s cubic-bezier(0.22, 1.25, 0.36, 1),
+              height 0.46s cubic-bezier(0.22, 1.25, 0.36, 1),
+              border-radius 0.42s cubic-bezier(0.22, 1.25, 0.36, 1),
+              transform 0.35s cubic-bezier(0.22, 1.25, 0.36, 1),
+              margin-top 0.4s cubic-bezier(0.22, 1.25, 0.36, 1),
+              background 0.3s ease,
+              box-shadow 0.35s ease;
+  will-change: width, height, transform, border-radius;
+  transform-origin: top center;
+}
+
+/* Top Specular Reflection Highlight (Glass shine) */
+.glass-reflection-line {
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1.5px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+/* Compact Lyric Text Slide Animation */
+@keyframes compact-lyric-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Horizontal Marquee Scroll for Long Lyrics in Compact Mode */
+@keyframes marquee-scroll {
+  0%, 20% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(calc(-100% + 180px));
+  }
+}
+
+.text-marquee-scroll {
+  display: inline-block;
+  animation: marquee-scroll 7s ease-in-out infinite alternate;
+}
+
+/* Sound Wave Equalizer Bars */
+.sound-bar {
+  width: 2.5px;
+  background: #38bdf8;
+  border-radius: 9999px;
+  transition: height 0.14s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+}
+
+/* Synced Lyrics Karaoke Style */
+.lyrics-line {
+  transition: all 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transform-origin: left center;
+  cursor: pointer;
+}
+
+.lyrics-line.active {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  transform: scale(1.04);
+  text-shadow: 0 0 16px rgba(56, 189, 248, 0.65), 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.lyrics-line.inactive {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.38);
+  filter: blur(0.3px);
+}
+
+.lyrics-line:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Discord Call Voice Ring */
+.voice-ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s ease-out;
+}
+
+.voice-ring.active {
+  box-shadow: 0 0 0 3px #23a55a, 0 0 16px rgba(35, 165, 90, 0.7);
+  animation: discord-voice-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes discord-voice-pulse {
+  0% {
+    box-shadow: 0 0 0 2px #23a55a, 0 0 10px rgba(35, 165, 90, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3.5px #23a55a, 0 0 20px rgba(35, 165, 90, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 2px #23a55a, 0 0 10px rgba(35, 165, 90, 0.4);
+  }
+}
+
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* File Absorption Ripple Wobble */
+@keyframes absorb-wobble {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.12, 0.88); }
+  50% { transform: scale(0.92, 1.08); }
+  75% { transform: scale(1.04, 0.96); }
+  100% { transform: scale(1); }
+}
+
+.file-drop-absorbing {
+  animation: absorb-wobble 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 35px rgba(56, 189, 248, 0.8), 0 24px 50px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Minimal Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}

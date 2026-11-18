@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Production builds & releases
+release/
+dist/
+*.bak
+
+# .NET build outputs
+core/bin/
+core/obj/
+core/publish/
+
+# Local settings & logs
+*.log
+updater-settings.json
+
+# OS & IDE
+.vscode/
+.idea/
+Thumbs.db

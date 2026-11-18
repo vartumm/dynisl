@@ -1,0 +1,89 @@
+{
+  "name": "dynisl",
+  "version": "1.0.0",
+  "description": "Ergonomic Apple-style Dynamic Island for Windows with Liquid Glass, Media & Synced Lyrics, Clipboard Manager, Call Indicator, and File Drop Shelf",
+  "main": "electron/main.js",
+  "scripts": {
+    "build": "vite build",
+    "start": "electron .",
+    "dev": "vite build && electron .",
+    "obfuscate": "node scripts/obfuscate.js",
+    "restore": "node scripts/restore.js",
+    "build:core": "cd core && D:\\dotnet\\dotnet.exe publish DynislCore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o publish",
+    "dist": "npm run build && npm run obfuscate && electron-builder --win && npm run restore"
+  },
+  "build": {
+    "appId": "com.antigravity.dynisl",
+    "productName": "Dynamic Island",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "dynisl-team",
+        "repo": "dynisl"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "!electron/**/*.bak",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "core/publish/DynislCore.exe",
+        "to": "core/DynislCore.exe"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    }
+  },
+  "keywords": [
+    "dynamic-island",
+    "windows",
+    "lyrics",
+    "clipboard",
+    "liquid-glass",
+    "droplet"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "javascript-obfuscator": "^5.10.1",
+    "vite": "^6.2.0"
+  }
+}
