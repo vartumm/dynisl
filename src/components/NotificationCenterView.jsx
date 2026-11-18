@@ -11,10 +11,13 @@ export default function NotificationCenterView({
   const getAppMeta = (app = '') => {
     const a = app.toLowerCase();
     if (a.includes('discord')) return { name: 'Discord', color: '#5865F2' };
-    if (a.includes('telegram')) return { name: 'Telegram', color: '#2AABEE' };
-    if (a.includes('vk')) return { name: 'ВКонтакте', color: '#0077FF' };
+    if (a.includes('telegram') || a.includes('tg')) return { name: 'Telegram', color: '#2AABEE' };
+    if (a.includes('vk') || a.includes('вконтакте')) return { name: 'ВКонтакте', color: '#0077FF' };
     if (a.includes('whatsapp')) return { name: 'WhatsApp', color: '#25D366' };
-    return { name: 'Система', color: '#38bdf8' };
+    if (a.includes('chrome') || a.includes('brave') || a.includes('edge') || a.includes('яндекс') || a.includes('browser')) {
+      return { name: 'Браузер', color: '#F59E0B' };
+    }
+    return { name: app || 'Система', color: '#38bdf8' };
   };
 
   const formatTime = (ts) => {

@@ -154,6 +154,7 @@ namespace DynislCore
                         var visual = n.Notification?.Visual;
                         if (visual != null)
                         {
+                            var textValues = new List<string>();
                             NotificationBinding? binding = null;
                             try
                             {
@@ -161,42 +162,47 @@ namespace DynislCore
                             }
                             catch { }
 
-                            if (binding == null && visual.Bindings != null && visual.Bindings.Count > 0)
-                            {
-                                binding = visual.Bindings[0];
-                            }
-
                             if (binding != null)
                             {
                                 var texts = binding.GetTextElements();
-                                if (texts != null && texts.Count > 0)
+                                if (texts != null)
                                 {
-                                    var textValues = texts
-                                        .Select(t => t?.Text?.Trim())
-                                        .Where(t => !string.IsNullOrEmpty(t))
-                                        .ToList();
-
-                                    if (textValues.Count == 1)
-                                    {
-                                        string t0 = textValues[0]!;
-                                        if (t0.Contains(": "))
-                                        {
-                                            var split = t0.Split(new[] { ": " }, 2, StringSplitOptions.None);
-                                            title = split[0];
-                                            body = split[1];
-                                        }
-                                        else
-                                        {
-                                            title = appName;
-                                            body = t0;
-                                        }
-                                    }
-                                    else if (textValues.Count >= 2)
-                                    {
-                                        title = textValues[0]!;
-                                        body = string.Join("\n", textValues.Skip(1));
-                                    }
+                                    textValues.AddRange(texts.Select(t => t?.Text?.Trim()).Where(t => !string.IsNullOrEmpty(t))!);
                                 }
+                            }
+
+                            if (textValues.Count == 0 && visual.Bindings != null)
+                            {
+                                foreach (var b in visual.Bindings)
+                                {
+                                    var texts = b.GetTextElements();
+                                    if (texts != null)
+                                    {
+                                        textValues.AddRange(texts.Select(t => t?.Text?.Trim()).Where(t => !string.IsNullOrEmpty(t))!);
+                                    }
+                                    if (textValues.Count > 0) break;
+                                }
+                            }
+
+                            if (textValues.Count == 1)
+                            {
+                                string t0 = textValues[0];
+                                if (t0.Contains(": "))
+                                {
+                                    var split = t0.Split(new[] { ": " }, 2, StringSplitOptions.None);
+                                    title = split[0];
+                                    body = split[1];
+                                }
+                                else
+                                {
+                                    title = appName;
+                                    body = t0;
+                                }
+                            }
+                            else if (textValues.Count >= 2)
+                            {
+                                title = textValues[0];
+                                body = string.Join("\n", textValues.Skip(1));
                             }
                         }
                     }

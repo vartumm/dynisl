@@ -558,48 +558,6 @@ export default function SettingsView({
               />
             </div>
 
-            {/* Test Notification Button */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'rgba(56, 189, 248, 0.08)',
-                border: '1px solid rgba(56, 189, 248, 0.2)',
-                borderRadius: '10px',
-                padding: '8px 12px'
-              }}
-            >
-              <div style={{ fontSize: '11.5px', color: '#e0f2fe' }}>
-                Проверить отображение баннера
-              </div>
-              <button
-                onClick={() => {
-                  window.dynislAPI?.sendCommand('test_notification', {
-                    app: 'telegram',
-                    title: 'Telegram',
-                    message: 'Привет! Уведомления в Dynamic Island работают отлично! ✨'
-                  });
-                }}
-                style={{
-                  background: '#0284c7',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '6px 12px',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-              >
-                <Bell size={12} />
-                <span>Тест</span>
-              </button>
-            </div>
-
             {/* Shortcuts help */}
             <div
               style={{
