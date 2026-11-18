@@ -4,6 +4,7 @@ import { X, MessageSquare, Send, Reply } from 'lucide-react';
 export default function NotificationToast({
   notification,
   onDismiss,
+  onOpenCenter,
   theme
 }) {
   if (!notification) return null;
@@ -24,7 +25,18 @@ export default function NotificationToast({
         gap: '12px'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+      <div
+        onClick={onOpenCenter}
+        title="Нажмите, чтобы открыть центр уведомлений"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          minWidth: 0,
+          flex: 1,
+          cursor: 'pointer'
+        }}
+      >
         {/* Avatar or App Icon */}
         <div style={{ position: 'relative' }}>
           {notification.avatar ? (

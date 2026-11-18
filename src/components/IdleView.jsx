@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clipboard, FolderOpen, Settings, Mic } from 'lucide-react';
+import { Clipboard, FolderOpen, Settings, Mic, Bell } from 'lucide-react';
 import SoundVisualizer from './SoundVisualizer';
 
 export default function IdleView({
@@ -8,7 +8,8 @@ export default function IdleView({
   theme,
   isMusicPlaying = false,
   musicInfo = null,
-  currentLyricLine = ''
+  currentLyricLine = '',
+  notificationsCount = 0
 }) {
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
@@ -266,6 +267,52 @@ export default function IdleView({
           }}
         >
           <FolderOpen size={12} />
+        </button>
+
+        <button
+          title={notificationsCount > 0 ? `Уведомления (${notificationsCount})` : 'Центр уведомлений'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenView('notifications');
+          }}
+          style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: 'none',
+            borderRadius: '9999px',
+            width: '24px',
+            height: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(255, 255, 255, 0.8)',
+            cursor: 'pointer',
+            position: 'relative',
+            transition: 'background 0.2s, color 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+            e.currentTarget.style.color = '#ffffff';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.8)';
+          }}
+        >
+          <Bell size={12} />
+          {notificationsCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '2px',
+                right: '2px',
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#f59e0b',
+                boxShadow: '0 0 6px #f59e0b'
+              }}
+            />
+          )}
         </button>
 
         <button

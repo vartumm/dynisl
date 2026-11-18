@@ -7,6 +7,7 @@ import FileShelfView from './FileShelfView';
 import SettingsView from './SettingsView';
 import NotificationToast from './NotificationToast';
 import LayoutFixerToast from './LayoutFixerToast';
+import NotificationCenterView from './NotificationCenterView';
 
 export default function MainIsland({
   activeView,
@@ -20,9 +21,12 @@ export default function MainIsland({
   clipboardItems,
   absorbedFiles,
   currentNotification,
+  notifications = [],
   layoutFixData,
   onDismissNotification,
   onDismissLayoutFix,
+  onClearNotifications,
+  onRemoveNotification,
   onPlayPause,
   onNext,
   onPrev,
@@ -84,6 +88,10 @@ export default function MainIsland({
   } else if (activeView === 'files') {
     width = 490;
     height = 330;
+    borderRadius = '28px';
+  } else if (activeView === 'notifications') {
+    width = 460;
+    height = 360;
     borderRadius = '28px';
   } else if (activeView === 'settings' || activeView === 'updates') {
     width = 470;
@@ -219,6 +227,10 @@ export default function MainIsland({
           <NotificationToast
             notification={currentNotification}
             onDismiss={onDismissNotification}
+            onOpenCenter={() => {
+              onDismissNotification();
+              setActiveView('notifications');
+            }}
             theme={theme}
           />
         ) : layoutFixData ? (
@@ -234,6 +246,7 @@ export default function MainIsland({
             isMusicPlaying={isMusicPlaying}
             musicInfo={musicInfo}
             currentLyricLine={currentLyricLine}
+            notificationsCount={notifications?.length || 0}
           />
         ) : activeView === 'music' ? (
           <MusicPlayerView
@@ -266,6 +279,14 @@ export default function MainIsland({
             files={absorbedFiles}
             onRemoveFile={onRemoveFile}
             onClearFiles={onClearFiles}
+            onClose={() => setActiveView('idle')}
+            theme={theme}
+          />
+        ) : activeView === 'notifications' ? (
+          <NotificationCenterView
+            notifications={notifications}
+            onClearAll={onClearNotifications}
+            onRemoveItem={onRemoveNotification}
             onClose={() => setActiveView('idle')}
             theme={theme}
           />

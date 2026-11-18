@@ -55,7 +55,7 @@ namespace DynislCore
                     Console.Error.WriteLine($"[NotificationListener]: NotificationChanged event not supported ({ex.Message}), active polling enabled.");
                 }
 
-                // Fast active poller (every 400ms) to guarantee instant notification capture
+                // Ultra-fast active poller (every 80ms) to instantly capture & suppress bottom-right Windows toasts
                 _ = Task.Run(async () =>
                 {
                     while (true)
@@ -65,7 +65,7 @@ namespace DynislCore
                             await CheckNewNotificationsAsync();
                         }
                         catch { }
-                        await Task.Delay(400);
+                        await Task.Delay(80);
                     }
                 });
             }
@@ -87,6 +87,13 @@ namespace DynislCore
                 {
                     if (_seenNotificationIds.Contains(n.Id)) continue;
                     _seenNotificationIds.Add(n.Id);
+
+                    // Suppress native Windows bottom-right popup by dismissing it from the system toast queue
+                    try
+                    {
+                        _listener.RemoveNotification(n.Id);
+                    }
+                    catch { }
 
                     string appName = n.AppInfo?.DisplayInfo?.DisplayName ?? "Приложение";
                     string appKey = appName.ToLowerInvariant();

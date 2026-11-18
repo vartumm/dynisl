@@ -14,7 +14,8 @@ import {
   RefreshCw,
   Download,
   CheckCircle2,
-  ArrowDownToLine
+  ArrowDownToLine,
+  Bell
 } from 'lucide-react';
 
 export default function SettingsView({
@@ -521,6 +522,36 @@ export default function SettingsView({
                 checked={autoStart}
                 onChange={handleToggleAutoStart}
                 activeColor="#a855f7"
+              />
+            </div>
+
+            {/* Suppress Windows system toasts with iOS Toggle */}
+            <div
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '10px',
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, paddingRight: '8px' }}>
+                <Bell size={16} color="#38bdf8" />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: '700' }}>
+                    Перехват уведомлений Windows
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                    Показывать в острове и глушить системные баннеры справа снизу
+                  </div>
+                </div>
+              </div>
+              <IosToggle
+                checked={settings.suppressSystemToasts !== false}
+                onChange={(val) => onUpdateSettings({ suppressSystemToasts: val })}
+                activeColor="#38bdf8"
               />
             </div>
 

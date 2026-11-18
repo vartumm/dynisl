@@ -79,6 +79,31 @@ export default function App() {
 
   // Notifications
   const [currentNotification, setCurrentNotification] = useState(null);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dynisl_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
+    try {
+      localStorage.removeItem('dynisl_notifications');
+    } catch {}
+  };
+
+  const handleRemoveNotification = (id) => {
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== id);
+      try {
+        localStorage.setItem('dynisl_notifications', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Layout Fixer toast
   const [layoutFixData, setLayoutFixData] = useState(null);
@@ -160,6 +185,18 @@ export default function App() {
         case 'notification':
           if (data) {
             setCurrentNotification(data);
+            setNotifications((prev) => {
+              const item = {
+                ...data,
+                id: data.id || `notif-${Date.now()}`,
+                timestamp: data.timestamp || new Date().toISOString()
+              };
+              const updated = [item, ...prev.filter((n) => n.id !== item.id)].slice(0, 50);
+              try {
+                localStorage.setItem('dynisl_notifications', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
             setIsHidden(false);
             setTimeout(() => {
               setCurrentNotification((cur) => (cur?.id === data.id ? null : cur));
@@ -313,6 +350,9 @@ export default function App() {
           clipboardItems={clipboardItems}
           absorbedFiles={absorbedFiles}
           currentNotification={currentNotification}
+          notifications={notifications}
+          onClearNotifications={handleClearAllNotifications}
+          onRemoveNotification={handleRemoveNotification}
           layoutFixData={layoutFixData}
           onDismissNotification={() => setCurrentNotification(null)}
           onDismissLayoutFix={() => setLayoutFixData(null)}

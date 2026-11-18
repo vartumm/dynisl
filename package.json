@@ -1,6 +1,6 @@
 {
   "name": "dynisl",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ergonomic Apple-style Dynamic Island for Windows with Liquid Glass, Media & Synced Lyrics, Clipboard Manager, Call Indicator, and File Drop Shelf",
   "main": "electron/main.js",
   "scripts": {

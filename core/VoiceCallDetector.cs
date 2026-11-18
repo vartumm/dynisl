@@ -1,17 +1,10 @@
 using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using Microsoft.Win32;
 
 namespace DynislCore
 {
     public class VoiceCallDetector
     {
-        [DllImport("iphlpapi.dll", SetLastError = true)]
-        private static extern uint GetExtendedUdpTable(IntPtr pUdpTable, ref int pdwSize, bool bOrder, uint ulAf, int TableClass, uint Reserved);
-
-        private const int AF_INET = 2;
-        private const int UDP_TABLE_OWNER_PID = 1;
-
         private static bool _isDismissedByUser = false;
 
         public static void DismissCurrentCall()
@@ -22,71 +15,95 @@ namespace DynislCore
         public static bool IsVoiceAppInCall(out string appName)
         {
             appName = "";
-            int size = 0;
-            GetExtendedUdpTable(IntPtr.Zero, ref size, false, AF_INET, UDP_TABLE_OWNER_PID, 0);
-            if (size <= 0)
+
+            if (CheckMicInUse("Discord"))
             {
+                appName = "discord";
+                if (!_isDismissedByUser) return true;
+            }
+            else if (CheckMicInUse("Telegram"))
+            {
+                appName = "telegram";
+                if (!_isDismissedByUser) return true;
+            }
+            else if (CheckMicInUse("WhatsApp"))
+            {
+                appName = "whatsapp";
+                if (!_isDismissedByUser) return true;
+            }
+            else
+            {
+                // Reset dismissed flag when call actually ends
                 _isDismissedByUser = false;
                 return false;
             }
 
-            IntPtr pTable = Marshal.AllocHGlobal(size);
-            bool foundVoice = false;
+            return false;
+        }
+
+        private static bool CheckMicInUse(string processNameSubstring)
+        {
+            // 1. Check NonPackaged apps (Desktop Discord, Telegram Win32, etc.)
             try
             {
-                if (GetExtendedUdpTable(pTable, ref size, false, AF_INET, UDP_TABLE_OWNER_PID, 0) == 0)
+                using var nonPackaged = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged");
+                if (nonPackaged != null)
                 {
-                    int numEntries = Marshal.ReadInt32(pTable);
-                    IntPtr rowPtr = IntPtr.Add(pTable, 4);
-
-                    for (int i = 0; i < numEntries; i++)
+                    foreach (var subName in nonPackaged.GetSubKeyNames())
                     {
-                        // MIB_UDPROW_OWNER_PID: dwLocalAddr (4), dwLocalPort (4), dwOwningPid (4)
-                        int pid = Marshal.ReadInt32(rowPtr, 8);
-                        rowPtr = IntPtr.Add(rowPtr, 12);
-
-                        if (pid > 0)
+                        if (subName.IndexOf(processNameSubstring, StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            try
+                            using var appKey = nonPackaged.OpenSubKey(subName);
+                            if (appKey != null)
                             {
-                                string pName = Process.GetProcessById(pid).ProcessName;
-                                if (pName.Equals("Discord", StringComparison.OrdinalIgnoreCase))
+                                var startObj = appKey.GetValue("LastUsedTimeStart");
+                                var stopObj = appKey.GetValue("LastUsedTimeStop");
+                                if (startObj is long start && stopObj is long stop)
                                 {
-                                    appName = "discord";
-                                    foundVoice = true;
-                                    break;
-                                }
-                                if (pName.Equals("Telegram", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    appName = "telegram";
-                                    foundVoice = true;
-                                    break;
+                                    // When recording is active, Stop is 0 or less than Start
+                                    if (start > 0 && (stop == 0 || stop < start))
+                                    {
+                                        return true;
+                                    }
                                 }
                             }
-                            catch { }
                         }
                     }
                 }
             }
             catch { }
-            finally
-            {
-                Marshal.FreeHGlobal(pTable);
-            }
 
-            if (!foundVoice)
+            // 2. Check Packaged (UWP / Store) apps
+            try
             {
-                // Reset dismissed flag when voice socket actually disappears
-                _isDismissedByUser = false;
-                return false;
+                using var packaged = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone");
+                if (packaged != null)
+                {
+                    foreach (var subName in packaged.GetSubKeyNames())
+                    {
+                        if (subName.Equals("NonPackaged", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (subName.IndexOf(processNameSubstring, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            using var appKey = packaged.OpenSubKey(subName);
+                            if (appKey != null)
+                            {
+                                var startObj = appKey.GetValue("LastUsedTimeStart");
+                                var stopObj = appKey.GetValue("LastUsedTimeStop");
+                                if (startObj is long start && stopObj is long stop)
+                                {
+                                    if (start > 0 && (stop == 0 || stop < start))
+                                    {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
+            catch { }
 
-            if (_isDismissedByUser)
-            {
-                return false;
-            }
-
-            return true;
+            return false;
         }
     }
 }
