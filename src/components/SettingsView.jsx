@@ -15,7 +15,8 @@ import {
   Download,
   CheckCircle2,
   ArrowDownToLine,
-  Bell
+  Bell,
+  ExternalLink
 } from 'lucide-react';
 
 export default function SettingsView({
@@ -781,6 +782,31 @@ export default function SettingsView({
               >
                 <Download size={15} />
                 <span>Скачать обновление v{newVersionInfo?.version || ''}</span>
+              </button>
+            )}
+
+            {/* Direct fallback to GitHub Release if error */}
+            {updateStatus === 'error' && (
+              <button
+                onClick={() => window.dynislAPI?.openExternal('https://github.com/vartumm/dynisl/releases/latest')}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '10px',
+                  color: '#fca5a5',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <ExternalLink size={13} />
+                <span>Открыть страницу релиза на GitHub</span>
               </button>
             )}
 

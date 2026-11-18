@@ -60,7 +60,11 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "artifactName": "Dynamic-Island-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Dynamic-Island-${version}.${ext}"
     }
   },
   "keywords": [
