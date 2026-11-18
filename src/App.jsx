@@ -156,6 +156,7 @@ export default function App() {
     if (!window.dynislAPI) return;
 
     window.dynislAPI.sendCommand('get_state');
+    window.dynislAPI.sendCommand('set_suppress_toasts', { enabled: settings.suppressSystemToasts !== false });
 
     const unsubscribe = window.dynislAPI.onCoreEvent((payload) => {
       if (!payload) return;

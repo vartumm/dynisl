@@ -18,6 +18,36 @@ namespace DynislCore
             Console.InputEncoding = Encoding.UTF8;
             Console.OutputEncoding = Encoding.UTF8;
 
+            if (args.Length > 0 && (args[0] == "--diag" || args[0] == "--test-notif"))
+            {
+                Console.WriteLine("=== DynislCore Notification Diagnostic ===");
+                try
+                {
+                    var listener = Windows.UI.Notifications.Management.UserNotificationListener.Current;
+                    if (listener == null)
+                    {
+                        Console.WriteLine("FAIL: UserNotificationListener.Current is null");
+                        return;
+                    }
+                    var access = await listener.RequestAccessAsync();
+                    Console.WriteLine($"Access Status: {access}");
+                    var notifs = await listener.GetNotificationsAsync(Windows.UI.Notifications.NotificationKinds.Toast);
+                    Console.WriteLine($"Current active toasts in Windows: {notifs?.Count ?? 0}");
+                    if (notifs != null)
+                    {
+                        foreach (var n in notifs)
+                        {
+                            Console.WriteLine($"  ID={n.Id}, App={n.AppInfo?.DisplayInfo?.DisplayName}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Exception during test: {ex}");
+                }
+                return;
+            }
+
             Emit("ready", new { version = "1.2.0", platform = "win32" });
 
             // Callbacks
@@ -197,6 +227,18 @@ namespace DynislCore
                             bool en = root.TryGetProperty("enabled", out var enProp) ? enProp.GetBoolean() : true;
                             bool ar = root.TryGetProperty("autoReplace", out var arProp) ? arProp.GetBoolean() : true;
                             KeyboardLayoutFixer.SetEnabled(en, ar);
+                            break;
+                        case "set_suppress_toasts":
+                            if (root.TryGetProperty("enabled", out var stProp))
+                            {
+                                NotificationListener.SuppressSystemToasts = stProp.GetBoolean();
+                            }
+                            break;
+                        case "test_notification":
+                            string tApp = root.TryGetProperty("app", out var appP) ? appP.GetString() ?? "telegram" : "telegram";
+                            string tTitle = root.TryGetProperty("title", out var titleP) ? titleP.GetString() ?? "Telegram" : "Telegram";
+                            string tMsg = root.TryGetProperty("message", out var msgP) ? msgP.GetString() ?? "Тестовое уведомление в Dynamic Island" : "Тестовое уведомление в Dynamic Island";
+                            NotificationListener.SimulateTestNotification(tApp, tTitle, tMsg);
                             break;
                         case "get_state":
                             Emit("media", MediaManager.CurrentMedia);

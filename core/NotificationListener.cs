@@ -12,18 +12,23 @@ namespace DynislCore
         private static UserNotificationListener? _listener;
         private static readonly HashSet<uint> _seenNotificationIds = new();
         public static Action<object>? OnNotificationReceived;
+        public static bool SuppressSystemToasts { get; set; } = true;
 
         public static async Task StartAsync()
         {
             try
             {
                 _listener = UserNotificationListener.Current;
-                if (_listener == null) return;
+                if (_listener == null)
+                {
+                    Console.Error.WriteLine("[NotificationListener] UserNotificationListener.Current is null");
+                    return;
+                }
 
                 var access = await _listener.RequestAccessAsync();
+                Console.Error.WriteLine($"[NotificationListener] Access status: {access}");
                 if (access != UserNotificationListenerAccessStatus.Allowed)
                 {
-                    Console.Error.WriteLine($"[NotificationListener] Access status: {access}");
                     return;
                 }
 
@@ -37,25 +42,15 @@ namespace DynislCore
                         {
                             _seenNotificationIds.Add(n.Id);
                         }
+                        Console.Error.WriteLine($"[NotificationListener] Marked {initial.Count} existing notifications as seen.");
                     }
-                }
-                catch { }
-
-                // Try subscribing to push notification event if supported in this environment
-                try
-                {
-                    _listener.NotificationChanged += async (sender, args) =>
-                    {
-                        await CheckNewNotificationsAsync();
-                    };
                 }
                 catch (Exception ex)
                 {
-                    // 0x80070490 in unpackaged app is expected; fallback to active polling
-                    Console.Error.WriteLine($"[NotificationListener]: NotificationChanged event not supported ({ex.Message}), active polling enabled.");
+                    Console.Error.WriteLine($"[NotificationListener] Initial get error: {ex.Message}");
                 }
 
-                // Ultra-fast active poller (every 80ms) to instantly capture & suppress bottom-right Windows toasts
+                // Active poller (every 60ms) to instantly capture & handle Windows toasts
                 _ = Task.Run(async () =>
                 {
                     while (true)
@@ -64,84 +59,202 @@ namespace DynislCore
                         {
                             await CheckNewNotificationsAsync();
                         }
-                        catch { }
-                        await Task.Delay(80);
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[NotificationListener Poller Error]: {ex.Message}");
+                        }
+                        await Task.Delay(60);
                     }
                 });
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[NotificationListener Error]: {ex.Message}");
+                Console.Error.WriteLine($"[NotificationListener Start Error]: {ex.Message}");
+            }
+        }
+
+        public static void SimulateTestNotification(string app, string title, string message)
+        {
+            try
+            {
+                string resolvedApp = string.IsNullOrWhiteSpace(app) ? "telegram" : app.ToLowerInvariant();
+                string appName = resolvedApp switch
+                {
+                    "discord" => "Discord",
+                    "telegram" => "Telegram",
+                    "vk" => "VK",
+                    "whatsapp" => "WhatsApp",
+                    _ => "Уведомление"
+                };
+
+                OnNotificationReceived?.Invoke(new
+                {
+                    id = $"sim-{DateTime.UtcNow.Ticks}",
+                    app = resolvedApp,
+                    appName = appName,
+                    author = title,
+                    title = appName,
+                    message = message,
+                    timestamp = DateTime.UtcNow.ToString("o")
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[NotificationListener Simulate Error]: {ex.Message}");
             }
         }
 
         private static async Task CheckNewNotificationsAsync()
         {
             if (_listener == null) return;
+
+            IReadOnlyList<UserNotification>? notifs = null;
             try
             {
-                var notifs = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
-                if (notifs == null || notifs.Count == 0) return;
+                notifs = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
+            }
+            catch
+            {
+                return;
+            }
 
-                foreach (var n in notifs)
+            if (notifs == null || notifs.Count == 0) return;
+
+            foreach (var n in notifs)
+            {
+                if (n == null) continue;
+                if (_seenNotificationIds.Contains(n.Id)) continue;
+                _seenNotificationIds.Add(n.Id);
+
+                try
                 {
-                    if (_seenNotificationIds.Contains(n.Id)) continue;
-                    _seenNotificationIds.Add(n.Id);
-
-                    // Suppress native Windows bottom-right popup by dismissing it from the system toast queue
+                    string appName = "Приложение";
                     try
                     {
-                        _listener.RemoveNotification(n.Id);
+                        if (n.AppInfo?.DisplayInfo?.DisplayName != null)
+                        {
+                            appName = n.AppInfo.DisplayInfo.DisplayName;
+                        }
                     }
                     catch { }
 
-                    string appName = n.AppInfo?.DisplayInfo?.DisplayName ?? "Приложение";
                     string appKey = appName.ToLowerInvariant();
                     string appType = "system";
                     if (appKey.Contains("discord")) appType = "discord";
-                    else if (appKey.Contains("telegram")) appType = "telegram";
-                    else if (appKey.Contains("vk")) appType = "vk";
+                    else if (appKey.Contains("telegram") || appKey.Contains("tg")) appType = "telegram";
+                    else if (appKey.Contains("vk") || appKey.Contains("вконтакте")) appType = "vk";
                     else if (appKey.Contains("whatsapp")) appType = "whatsapp";
+                    else if (appKey.Contains("chrome") || appKey.Contains("brave") || appKey.Contains("edge") || appKey.Contains("browser") || appKey.Contains("яндекс")) appType = "browser";
 
                     string title = appName;
                     string body = "";
 
-                    var binding = n.Notification?.Visual?.GetBinding(KnownNotificationBindings.ToastGeneric);
-                    if (binding != null)
+                    try
                     {
-                        var texts = binding.GetTextElements();
-                        if (texts != null)
+                        var visual = n.Notification?.Visual;
+                        if (visual != null)
                         {
-                            if (texts.Count > 0 && !string.IsNullOrWhiteSpace(texts[0].Text))
-                                title = texts[0].Text;
-                            if (texts.Count > 1 && !string.IsNullOrWhiteSpace(texts[1].Text))
-                                body = texts[1].Text;
+                            NotificationBinding? binding = null;
+                            try
+                            {
+                                binding = visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+                            }
+                            catch { }
+
+                            if (binding == null && visual.Bindings != null && visual.Bindings.Count > 0)
+                            {
+                                binding = visual.Bindings[0];
+                            }
+
+                            if (binding != null)
+                            {
+                                var texts = binding.GetTextElements();
+                                if (texts != null && texts.Count > 0)
+                                {
+                                    var textValues = texts
+                                        .Select(t => t?.Text?.Trim())
+                                        .Where(t => !string.IsNullOrEmpty(t))
+                                        .ToList();
+
+                                    if (textValues.Count == 1)
+                                    {
+                                        string t0 = textValues[0]!;
+                                        if (t0.Contains(": "))
+                                        {
+                                            var split = t0.Split(new[] { ": " }, 2, StringSplitOptions.None);
+                                            title = split[0];
+                                            body = split[1];
+                                        }
+                                        else
+                                        {
+                                            title = appName;
+                                            body = t0;
+                                        }
+                                    }
+                                    else if (textValues.Count >= 2)
+                                    {
+                                        title = textValues[0]!;
+                                        body = string.Join("\n", textValues.Skip(1));
+                                    }
+                                }
+                            }
                         }
                     }
-
-                    if (!string.IsNullOrWhiteSpace(title) || !string.IsNullOrWhiteSpace(body))
+                    catch (Exception ex)
                     {
-                        OnNotificationReceived?.Invoke(new
+                        Console.Error.WriteLine($"[NotificationListener Visual Error]: {ex.Message}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(body) && !string.IsNullOrWhiteSpace(title) && title != appName)
+                    {
+                        body = title;
+                        title = appName;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(body))
+                    {
+                        body = "Новое уведомление";
+                    }
+
+                    Console.Error.WriteLine($"[NotificationListener Intercepted]: App={appName}, Title={title}, Body={body}");
+
+                    // Dispatch to Dynamic Island UI
+                    OnNotificationReceived?.Invoke(new
+                    {
+                        id = n.Id.ToString(),
+                        app = appType,
+                        appName = appName,
+                        author = title,
+                        title = appName,
+                        message = body,
+                        timestamp = DateTime.UtcNow.ToString("o")
+                    });
+
+                    // Suppress native Windows bottom-right popup by dismissing it AFTER extracting payload
+                    if (SuppressSystemToasts)
+                    {
+                        try
                         {
-                            id = n.Id.ToString(),
-                            app = appType,
-                            appName = appName,
-                            author = title,
-                            title = appName,
-                            message = body,
-                            timestamp = DateTime.UtcNow.ToString("o")
-                        });
+                            _listener.RemoveNotification(n.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[NotificationListener Remove Error]: {ex.Message}");
+                        }
                     }
                 }
-
-                // Limit seen IDs set
-                if (_seenNotificationIds.Count > 200)
+                catch (Exception ex)
                 {
-                    var toRemove = _seenNotificationIds.Take(100).ToList();
-                    foreach (var id in toRemove) _seenNotificationIds.Remove(id);
+                    Console.Error.WriteLine($"[NotificationListener Processing Error]: {ex.Message}");
                 }
             }
-            catch { }
+
+            // Keep seen IDs bounded
+            if (_seenNotificationIds.Count > 300)
+            {
+                var toRemove = _seenNotificationIds.Take(150).ToList();
+                foreach (var id in toRemove) _seenNotificationIds.Remove(id);
+            }
         }
     }
 }

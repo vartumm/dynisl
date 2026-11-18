@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, MessageSquare, Send, Reply } from 'lucide-react';
+import { X, MessageSquare, Send, Reply, Bell } from 'lucide-react';
 
 export default function NotificationToast({
   notification,
@@ -9,8 +9,20 @@ export default function NotificationToast({
 }) {
   if (!notification) return null;
 
-  const isDiscord = notification.app === 'discord';
-  const appColor = isDiscord ? '#5865F2' : '#2AABEE';
+  const getAppMeta = (app = '', appName = '') => {
+    const a = (app + ' ' + appName).toLowerCase();
+    if (a.includes('discord')) return { name: 'Discord', color: '#5865F2', scheme: 'discord://' };
+    if (a.includes('telegram') || a.includes('tg')) return { name: 'Telegram', color: '#2AABEE', scheme: 'tg://' };
+    if (a.includes('vk') || a.includes('вконтакте')) return { name: 'ВКонтакте', color: '#0077FF', scheme: 'https://vk.com' };
+    if (a.includes('whatsapp')) return { name: 'WhatsApp', color: '#25D366', scheme: 'whatsapp://' };
+    if (a.includes('chrome') || a.includes('brave') || a.includes('edge') || a.includes('яндекс') || a.includes('browser')) {
+      return { name: appName || 'Браузер', color: '#F59E0B', scheme: null };
+    }
+    return { name: appName || 'Уведомление', color: '#38BDF8', scheme: null };
+  };
+
+  const meta = getAppMeta(notification.app, notification.appName);
+  const appColor = meta.color;
 
   return (
     <div
@@ -38,7 +50,7 @@ export default function NotificationToast({
         }}
       >
         {/* Avatar or App Icon */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
           {notification.avatar ? (
             <img
               src={notification.avatar}
@@ -87,11 +99,20 @@ export default function NotificationToast({
         {/* Text Details */}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#ffffff' }}>
-              {notification.author}
+            <span
+              style={{
+                fontSize: '12.5px',
+                fontWeight: '700',
+                color: '#ffffff',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {notification.author || notification.appName || 'Уведомление'}
             </span>
-            <span style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)' }}>
-              • {notification.appName}
+            <span style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', flexShrink: 0 }}>
+              • {notification.appName || meta.name}
             </span>
           </div>
           <div
@@ -110,37 +131,42 @@ export default function NotificationToast({
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <button
-          onClick={() => {
-            if (isDiscord) window.dynislAPI?.openExternal('discord://');
-            else window.dynislAPI?.openExternal('tg://');
-            onDismiss();
-          }}
-          title="Открыть приложение"
-          style={{
-            background: `${appColor}25`,
-            color: appColor,
-            border: `1px solid ${appColor}50`,
-            borderRadius: '9999px',
-            padding: '4px 10px',
-            fontSize: '11px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          <Reply size={12} />
-          <span>Ответить</span>
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+        {meta.scheme && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dynislAPI?.openExternal(meta.scheme);
+              onDismiss();
+            }}
+            title="Открыть приложение"
+            style={{
+              background: `${appColor}25`,
+              color: appColor,
+              border: `1px solid ${appColor}50`,
+              borderRadius: '9999px',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <Reply size={12} />
+            <span>Открыть</span>
+          </button>
+        )}
 
         <button
-          onClick={onDismiss}
-          title="Закрыть уведомление"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+          title="Скрыть"
           style={{
-            background: 'rgba(255, 255, 255, 0.1)',
+            background: 'rgba(255, 255, 255, 0.08)',
             border: 'none',
             borderRadius: '50%',
             width: '24px',
@@ -149,10 +175,13 @@ export default function NotificationToast({
             alignItems: 'center',
             justifyContent: 'center',
             color: 'rgba(255, 255, 255, 0.6)',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'background 0.15s ease'
           }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
         >
-          <X size={12} />
+          <X size={13} />
         </button>
       </div>
     </div>
