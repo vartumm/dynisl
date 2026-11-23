@@ -237,12 +237,64 @@ app.whenReady().then(() => {
     sendToCore(payload);
   });
 
+  ipcMain.on('activate-app', (event, data) => {
+    sendToCore({ cmd: 'activate_app', ...(data || {}) });
+
+    // 1. If screenshot filePath is provided, open the actual screenshot image file!
+    if (data?.filePath && fs.existsSync(data.filePath)) {
+      shell.openPath(data.filePath);
+      return;
+    }
+
+    if (data?.app === 'screenshot') {
+      const oneDrive = process.env.OneDrive;
+      const dirs = [
+        oneDrive ? path.join(oneDrive, 'Изображения', 'Screenshots') : null,
+        oneDrive ? path.join(oneDrive, 'Изображения', 'Снимки экрана') : null,
+        path.join(app.getPath('pictures'), 'Screenshots'),
+        path.join(app.getPath('pictures'), 'Снимки экрана')
+      ].filter(Boolean);
+
+      for (const d of dirs) {
+        if (fs.existsSync(d)) {
+          const files = fs.readdirSync(d).filter(f => f.endsWith('.png')).map(f => ({
+            name: f,
+            time: fs.statSync(path.join(d, f)).mtimeMs
+          })).sort((a, b) => b.time - a.time);
+
+          if (files.length > 0) {
+            shell.openPath(path.join(d, files[0].name));
+            return;
+          }
+        }
+      }
+      shell.openExternal('ms-screensketch:').catch(() => {});
+      return;
+    }
+
+    // 2. Telegram: launch executable to force restore from tray if needed
+    if (data?.app === 'telegram' || (data?.scheme && data.scheme.startsWith('tg:'))) {
+      const ayuPath = 'D:\\ayu\\AyuGram.exe';
+      if (fs.existsSync(ayuPath)) {
+        spawn(ayuPath, [], { detached: true, stdio: 'ignore' }).unref();
+      }
+      shell.openExternal('tg://').catch(() => {});
+      return;
+    }
+
+    if (data?.scheme) {
+      shell.openExternal(data.scheme).catch(() => {});
+    }
+  });
+
   ipcMain.on('open-external', (event, url) => {
-    shell.openExternal(url);
+    if (url) shell.openExternal(url);
   });
 
   ipcMain.on('open-path', (event, filePath) => {
-    shell.showItemInFolder(filePath);
+    if (filePath && fs.existsSync(filePath)) {
+      shell.openPath(filePath);
+    }
   });
 
   ipcMain.on('copy-clipboard', (event, text) => {

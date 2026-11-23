@@ -1,25 +1,15 @@
 import React from 'react';
-import { Bell, BellOff, Trash2, ChevronUp, X, MessageSquare } from 'lucide-react';
+import { Bell, BellOff, Trash2, ChevronUp, X, MessageSquare, Camera, ExternalLink } from 'lucide-react';
+import { getAppMeta } from './NotificationToast';
 
 export default function NotificationCenterView({
   notifications = [],
   onClearAll,
   onRemoveItem,
   onClose,
+  onActivateItem,
   theme
 }) {
-  const getAppMeta = (app = '') => {
-    const a = app.toLowerCase();
-    if (a.includes('discord')) return { name: 'Discord', color: '#5865F2' };
-    if (a.includes('telegram') || a.includes('tg')) return { name: 'Telegram', color: '#2AABEE' };
-    if (a.includes('vk') || a.includes('вконтакте')) return { name: 'ВКонтакте', color: '#0077FF' };
-    if (a.includes('whatsapp')) return { name: 'WhatsApp', color: '#25D366' };
-    if (a.includes('chrome') || a.includes('brave') || a.includes('edge') || a.includes('яндекс') || a.includes('browser')) {
-      return { name: 'Браузер', color: '#F59E0B' };
-    }
-    return { name: app || 'Система', color: '#38bdf8' };
-  };
-
   const formatTime = (ts) => {
     if (!ts) return '';
     try {
@@ -28,6 +18,19 @@ export default function NotificationCenterView({
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch {
       return '';
+    }
+  };
+
+  const handleItemClick = (item) => {
+    if (onActivateItem) {
+      onActivateItem(item);
+    } else {
+      const meta = getAppMeta(item.app, item.appName);
+      window.dynislAPI?.activateApp?.({ app: item.app, scheme: meta.scheme, aumid: item.aumid });
+      if (meta.scheme) {
+        window.dynislAPI?.openExternal(meta.scheme);
+      }
+      onClose();
     }
   };
 
@@ -155,15 +158,19 @@ export default function NotificationCenterView({
             <BellOff size={28} />
             <div style={{ fontSize: '13px', fontWeight: '600' }}>Уведомлений пока нет</div>
             <div style={{ fontSize: '11px', textAlign: 'center', maxWidth: '280px', lineHeight: 1.4 }}>
-              Все входящие сообщения из Telegram, Discord и других программ будут появляться в острове и сохраняться здесь
+              Все входящие сообщения из Telegram, снимки экрана и системные события сохраняются здесь
             </div>
           </div>
         ) : (
           notifications.map((item) => {
-            const meta = getAppMeta(item.app || item.appName);
+            const meta = getAppMeta(item.app, item.appName);
+            const isScreenshot = meta.isScreenshot || item.app === 'screenshot';
+
             return (
               <div
                 key={item.id}
+                onClick={() => handleItemClick(item)}
+                title={isScreenshot ? 'Нажмите, чтобы открыть снимок в Ножницах' : `Нажмите, чтобы открыть ${meta.name}`}
                 style={{
                   background: 'rgba(255, 255, 255, 0.05)',
                   border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -172,28 +179,55 @@ export default function NotificationCenterView({
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '10px',
-                  transition: 'background 0.2s',
-                  position: 'relative'
+                  transition: 'all 0.15s ease',
+                  position: 'relative',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.borderColor = `${meta.color}60`;
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                {/* App Icon / Badge */}
-                <div
-                  style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '8px',
-                    background: meta.color,
-                    color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    marginTop: '2px',
-                    boxShadow: `0 2px 8px ${meta.color}44`
-                  }}
-                >
-                  <MessageSquare size={15} />
-                </div>
+                {/* App Icon or Screenshot Thumbnail */}
+                {item.avatar ? (
+                  <img
+                    src={item.avatar}
+                    alt="Preview"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: isScreenshot ? '6px' : '50%',
+                      objectFit: 'cover',
+                      border: `1px solid ${meta.color}50`,
+                      flexShrink: 0,
+                      marginTop: '2px'
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '30px',
+                      height: '30px',
+                      borderRadius: isScreenshot ? '8px' : '8px',
+                      background: meta.color,
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      marginTop: '2px',
+                      boxShadow: `0 2px 8px ${meta.color}44`
+                    }}
+                  >
+                    {isScreenshot ? <Camera size={15} /> : <MessageSquare size={15} />}
+                  </div>
+                )}
 
                 {/* Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -232,9 +266,40 @@ export default function NotificationCenterView({
                       </span>
                     </div>
 
-                    <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)', flexShrink: 0 }}>
-                      {formatTime(item.timestamp)}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)', flexShrink: 0 }}>
+                        {formatTime(item.timestamp)}
+                      </span>
+
+                      {/* Remove single button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveItem(item.id);
+                        }}
+                        title="Удалить"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.3)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.15s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = '#ef4444';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'rgba(255, 255, 255, 0.3)';
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   <div
@@ -248,32 +313,6 @@ export default function NotificationCenterView({
                     {item.message || item.body || ''}
                   </div>
                 </div>
-
-                {/* Remove single button */}
-                <button
-                  onClick={() => onRemoveItem(item.id)}
-                  title="Удалить"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'rgba(255, 255, 255, 0.3)',
-                    cursor: 'pointer',
-                    padding: '2px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '4px',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#ef4444';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'rgba(255, 255, 255, 0.3)';
-                  }}
-                >
-                  <X size={13} />
-                </button>
               </div>
             );
           })

@@ -6,6 +6,7 @@ import SoundVisualizer from './SoundVisualizer';
 export default function MusicPlayerView({
   musicInfo,
   lyricsData,
+  currentTimeSec: externalTimeSec,
   onPlayPause,
   onNext,
   onPrev,
@@ -17,17 +18,24 @@ export default function MusicPlayerView({
 }) {
   const isPlaying = musicInfo?.Status === 'Playing';
   const durationMs = musicInfo?.DurationMs || 0;
-  const initialPosMs = musicInfo?.PositionMs || 0;
+  const initialPosMs = (externalTimeSec ? externalTimeSec * 1000 : musicInfo?.PositionMs) || 0;
 
   const [currentPosMs, setCurrentPosMs] = useState(initialPosMs);
   const [isDraggingSeek, setIsDraggingSeek] = useState(false);
 
   useEffect(() => {
-    setCurrentPosMs(musicInfo?.PositionMs || 0);
-  }, [musicInfo?.PositionMs]);
+    if (!isDraggingSeek && typeof externalTimeSec === 'number') {
+      setCurrentPosMs(externalTimeSec * 1000);
+    }
+  }, [externalTimeSec, isDraggingSeek]);
 
   useEffect(() => {
-    if (!isPlaying || isDraggingSeek) return;
+    if (externalTimeSec !== undefined) return;
+    setCurrentPosMs(musicInfo?.PositionMs || 0);
+  }, [musicInfo?.PositionMs, externalTimeSec]);
+
+  useEffect(() => {
+    if (externalTimeSec !== undefined || !isPlaying || isDraggingSeek) return;
     const interval = setInterval(() => {
       setCurrentPosMs((prev) => {
         if (durationMs > 0 && prev >= durationMs) return prev;
@@ -35,7 +43,7 @@ export default function MusicPlayerView({
       });
     }, 500);
     return () => clearInterval(interval);
-  }, [isPlaying, durationMs, isDraggingSeek]);
+  }, [isPlaying, durationMs, isDraggingSeek, externalTimeSec]);
 
   const formatTime = (ms) => {
     const totalSec = Math.floor(ms / 1000);

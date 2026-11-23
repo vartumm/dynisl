@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('dynislAPI', {
   sendCommand: (cmd, payload = {}) => ipcRenderer.send('send-core-command', { cmd, ...payload }),
 
   // System actions
+  activateApp: (data) => ipcRenderer.send('activate-app', data),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   openPath: (path) => ipcRenderer.send('open-path', path),
   copyToClipboard: (text) => ipcRenderer.send('copy-clipboard', text),

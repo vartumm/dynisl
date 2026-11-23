@@ -240,6 +240,12 @@ namespace DynislCore
                             string tMsg = root.TryGetProperty("message", out var msgP) ? msgP.GetString() ?? "Тестовое уведомление в Dynamic Island" : "Тестовое уведомление в Dynamic Island";
                             NotificationListener.SimulateTestNotification(tApp, tTitle, tMsg);
                             break;
+                        case "activate_app":
+                            string actApp = root.TryGetProperty("app", out var ap) ? ap.GetString() ?? "" : "";
+                            string actAumid = root.TryGetProperty("aumid", out var au) ? au.GetString() ?? "" : "";
+                            string actFile = root.TryGetProperty("filePath", out var fp) ? fp.GetString() ?? "" : "";
+                            ActivateTargetApp(actApp, actAumid, actFile);
+                            break;
                         case "get_state":
                             Emit("media", MediaManager.CurrentMedia);
                             Emit("clipboard", ClipboardManager.GetHistory());
@@ -254,6 +260,142 @@ namespace DynislCore
                     Console.Error.WriteLine($"[Command error]: {ex.Message}");
                 }
             }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
+        private const int ASFW_ANY = -1;
+        private const byte VK_MENU = 0x12;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
+
+        private static void ActivateTargetApp(string app, string aumid, string filePath)
+        {
+            try
+            {
+                string norm = $"{app} {aumid}".ToLowerInvariant();
+
+                // 1. Screenshot: Open the actual image file!
+                if (norm.Contains("screenshot") || norm.Contains("screensketch") || norm.Contains("snipping") || norm.Contains("снимок") || !string.IsNullOrEmpty(filePath))
+                {
+                    if (!string.IsNullOrEmpty(filePath) && System.IO.File.Exists(filePath))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(filePath) { UseShellExecute = true });
+                        return;
+                    }
+
+                    string newest = FindNewestScreenshot();
+                    if (!string.IsNullOrEmpty(newest) && System.IO.File.Exists(newest))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(newest) { UseShellExecute = true });
+                        return;
+                    }
+
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-screensketch:") { UseShellExecute = true });
+                    return;
+                }
+
+                // 2. Telegram / AyuGram
+                if (norm.Contains("ayu") || norm.Contains("telegram") || norm.Contains("tg"))
+                {
+                    try
+                    {
+                        keybd_event(VK_MENU, 0, 0, 0);
+                        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+                        AllowSetForegroundWindow(ASFW_ANY);
+                    }
+                    catch { }
+
+                    bool restored = FocusWindowByProcessNames(new[] { "AyuGram", "Telegram", "TelegramDesktop" });
+
+                    string exePath = @"D:\ayu\AyuGram.exe";
+                    if (System.IO.File.Exists(exePath))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exePath) { UseShellExecute = true });
+                    }
+                    else
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("tg://") { UseShellExecute = true });
+                    }
+                    return;
+                }
+
+                if (norm.Contains("discord"))
+                {
+                    FocusWindowByProcessNames(new[] { "Discord" });
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("discord://") { UseShellExecute = true });
+                    return;
+                }
+
+                if (norm.Contains("whatsapp"))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("whatsapp://") { UseShellExecute = true });
+                    return;
+                }
+
+                if (norm.Contains("vk"))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://vk.com") { UseShellExecute = true });
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ActivateTargetApp Error]: {ex.Message}");
+            }
+        }
+
+        private static string FindNewestScreenshot()
+        {
+            try
+            {
+                string dir = ClipboardManager.GetScreenshotsDirectory();
+                if (System.IO.Directory.Exists(dir))
+                {
+                    var di = new System.IO.DirectoryInfo(dir);
+                    var files = di.GetFiles("*.png").OrderByDescending(f => f.LastWriteTime).ToList();
+                    if (files.Count > 0)
+                    {
+                        return files[0].FullName;
+                    }
+                }
+            }
+            catch { }
+            return "";
+        }
+
+        private static bool FocusWindowByProcessNames(string[] names)
+        {
+            foreach (var name in names)
+            {
+                try
+                {
+                    var procs = System.Diagnostics.Process.GetProcessesByName(name);
+                    foreach (var p in procs)
+                    {
+                        if (p.MainWindowHandle != IntPtr.Zero)
+                        {
+                            ShowWindow(p.MainWindowHandle, SW_RESTORE);
+                            ShowWindow(p.MainWindowHandle, SW_SHOW);
+                            SetForegroundWindow(p.MainWindowHandle);
+                            return true;
+                        }
+                    }
+                }
+                catch { }
+            }
+            return false;
         }
 
         private static void Emit(string type, object data)

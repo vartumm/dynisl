@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clipboard, FolderOpen, Settings, Mic, Bell } from 'lucide-react';
 import SoundVisualizer from './SoundVisualizer';
+import CompactKaraokeView from './CompactKaraokeView';
 
 export default function IdleView({
   settings,
@@ -9,6 +10,7 @@ export default function IdleView({
   isMusicPlaying = false,
   musicInfo = null,
   currentLyricLine = '',
+  karaokeState = null,
   notificationsCount = 0
 }) {
   const [timeStr, setTimeStr] = useState('');
@@ -31,8 +33,7 @@ export default function IdleView({
     return () => clearInterval(interval);
   }, []);
 
-  const hasMusic = musicInfo && musicInfo.HasSession && musicInfo.Title;
-  const showCompactLyrics = isMusicPlaying && currentLyricLine && !musicInfo?.IsAd;
+  const hasMusic = Boolean(musicInfo && musicInfo.HasSession && musicInfo.Title);
 
   return (
     <div
@@ -42,12 +43,12 @@ export default function IdleView({
         justifyContent: 'space-between',
         width: '100%',
         height: '100%',
-        padding: '0 12px',
-        gap: '10px',
+        padding: '0 10px',
+        gap: '8px',
         boxSizing: 'border-box'
       }}
     >
-      {/* Left section: Time/Date or Thumbnail */}
+      {/* Left section: Time/Date or Album Art */}
       <div
         style={{
           display: 'flex',
@@ -60,6 +61,7 @@ export default function IdleView({
           e.stopPropagation();
           onOpenView(hasMusic ? 'music' : 'clipboard');
         }}
+        title={hasMusic ? 'Открыть плеер' : 'Буфер обмена'}
       >
         {hasMusic ? (
           musicInfo.ThumbnailBase64 ? (
@@ -67,24 +69,27 @@ export default function IdleView({
               src={musicInfo.ThumbnailBase64}
               alt="Album"
               style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '6px',
+                width: '26px',
+                height: '26px',
+                borderRadius: '7px',
                 objectFit: 'cover',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.4)'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                transition: 'transform 0.2s ease'
               }}
+              className={isMusicPlaying ? 'album-art-playing' : ''}
             />
           ) : (
             <div
               style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '6px',
+                width: '26px',
+                height: '26px',
+                borderRadius: '7px',
                 background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '11px'
+                fontSize: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
               }}
             >
               🎵
@@ -117,94 +122,67 @@ export default function IdleView({
         )}
       </div>
 
-      {/* Middle section: Moving Compact Lyrics with Marquee */}
-      <div
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          padding: '0 6px',
-          position: 'relative'
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenView(hasMusic ? 'music' : 'clipboard');
-        }}
-      >
-        {showCompactLyrics ? (
-          <div
-            key={currentLyricLine}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              animation: 'compact-lyric-slide 0.35s cubic-bezier(0.2, 0.9, 0.3, 1)',
-              overflow: 'hidden',
-              whiteSpace: 'nowrap',
-              maxWidth: '100%'
-            }}
-          >
-            <Mic size={11} color={theme?.accent || '#38bdf8'} style={{ flexShrink: 0 }} />
-            <span
-              className={currentLyricLine.length > 28 ? 'text-marquee-scroll' : ''}
-              style={{
-                fontSize: '12px',
-                fontWeight: '700',
-                color: '#ffffff',
-                textShadow: '0 0 10px rgba(56, 189, 248, 0.55)',
-                display: 'inline-block'
-              }}
-            >
-              {currentLyricLine}
-            </span>
-          </div>
-        ) : hasMusic ? (
-          <div style={{ maxWidth: '180px', overflow: 'hidden', textAlign: 'center' }}>
-            <div
-              style={{
-                fontSize: '12px',
-                fontWeight: '600',
-                whiteSpace: 'nowrap',
-                textOverflow: 'ellipsis',
-                overflow: 'hidden'
-              }}
-            >
-              {musicInfo.Title}
-            </div>
-            <div
-              style={{
-                fontSize: '10px',
-                color: 'rgba(255, 255, 255, 0.5)',
-                whiteSpace: 'nowrap',
-                textOverflow: 'ellipsis',
-                overflow: 'hidden'
-              }}
-            >
-              {musicInfo.Artist}
-            </div>
-          </div>
-        ) : null}
-      </div>
+      {/* Middle section: Precision Compact Karaoke View */}
+      {hasMusic && !musicInfo?.IsAd ? (
+        <CompactKaraokeView
+          karaokeState={karaokeState}
+          musicInfo={musicInfo}
+          theme={theme}
+          onOpenLyrics={() => onOpenView('lyrics')}
+          onOpenMusic={() => onOpenView('music')}
+        />
+      ) : (
+        <div style={{ flex: 1 }} />
+      )}
 
       {/* Right section: Visualizer & Quick Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
         {hasMusic && (
-          <div
-            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenView('music');
-            }}
-          >
-            <SoundVisualizer
-              isPlaying={isMusicPlaying}
-              color={theme?.accent || '#38bdf8'}
-              barCount={4}
-            />
-          </div>
+          <>
+            <div
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenView('music');
+              }}
+              title="Открыть плеер"
+            >
+              <SoundVisualizer
+                isPlaying={isMusicPlaying}
+                color={theme?.accent || '#38bdf8'}
+                barCount={4}
+              />
+            </div>
+
+            <button
+              title="Открыть караоке на весь экран"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenView('lyrics');
+              }}
+              style={{
+                background: karaokeState?.isSynced ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.08)',
+                border: 'none',
+                borderRadius: '9999px',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: karaokeState?.isSynced ? (theme?.accent || '#38bdf8') : 'rgba(255, 255, 255, 0.8)',
+                cursor: 'pointer',
+                transition: 'background 0.2s, color 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(56, 189, 248, 0.35)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = karaokeState?.isSynced ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.08)';
+              }}
+            >
+              <Mic size={12} />
+            </button>
+          </>
         )}
 
         <button

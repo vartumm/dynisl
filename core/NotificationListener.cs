@@ -11,11 +11,175 @@ namespace DynislCore
     {
         private static UserNotificationListener? _listener;
         private static readonly HashSet<uint> _seenNotificationIds = new();
+        private static DateTime _lastScreenshotNotificationTime = DateTime.MinValue;
         public static Action<object>? OnNotificationReceived;
         public static bool SuppressSystemToasts { get; set; } = true;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr SetWinEventHook(
+            uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
+            WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        private delegate void WinEventDelegate(
+            IntPtr hWinEventHook, uint eventType, IntPtr hWnd, int idObject, int idChild,
+            uint dwEventThread, uint dwmsEventTime);
+
+        private const uint EVENT_OBJECT_SHOW = 0x8002;
+        private const uint WINEVENT_OUTOFCONTEXT = 0;
+        private const int SW_HIDE = 0;
+
+        private static IntPtr _tgHookId = IntPtr.Zero;
+        private static WinEventDelegate? _tgWinEventDelegate;
+        private static DateTime _lastTelegramNotificationTime = DateTime.MinValue;
+
+        public static void EmitScreenshotNotification(string? base64Thumb = null, string? filePath = null)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastScreenshotNotificationTime).TotalMilliseconds < 1200)
+            {
+                return;
+            }
+            _lastScreenshotNotificationTime = now;
+
+            OnNotificationReceived?.Invoke(new
+            {
+                id = $"ss-{now.Ticks}",
+                app = "screenshot",
+                appName = "Снимок экрана",
+                author = "Снимок экрана",
+                title = "Снимок экрана",
+                message = "Снимок сохранен в буфер • Нажмите, чтобы открыть",
+                timestamp = now.ToString("o"),
+                avatar = base64Thumb ?? "",
+                aumid = "Microsoft.ScreenSketch_8wekyb3d8bbwe!App",
+                scheme = "ms-screensketch:",
+                filePath = filePath ?? ""
+            });
+        }
+
+        private static void OnTelegramWinEvent(
+            IntPtr hWinEventHook, uint eventType, IntPtr hWnd, int idObject, int idChild,
+            uint dwEventThread, uint dwmsEventTime)
+        {
+            try
+            {
+                if (idObject != 0 || hWnd == IntPtr.Zero) return;
+
+                GetWindowThreadProcessId(hWnd, out uint pid);
+                if (pid == 0) return;
+
+                string procName = "";
+                try
+                {
+                    using var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+                    procName = proc.ProcessName.ToLowerInvariant();
+                }
+                catch { }
+
+                if (!procName.Contains("ayu") && !procName.Contains("telegram")) return;
+
+                if (!GetWindowRect(hWnd, out RECT rc)) return;
+                int w = rc.Right - rc.Left;
+                int h = rc.Bottom - rc.Top;
+
+                // Telegram / AyuGram notification popups have width between 240 and 460, and height between 40 and 160
+                if (w >= 240 && w <= 460 && h >= 40 && h <= 160)
+                {
+                    // Suppress Telegram's native popup immediately from screen ("отбираем" уведомление у Телеграма)
+                    ShowWindow(hWnd, SW_HIDE);
+
+                    var now = DateTime.UtcNow;
+                    if ((now - _lastTelegramNotificationTime).TotalMilliseconds < 1500)
+                    {
+                        return;
+                    }
+                    _lastTelegramNotificationTime = now;
+
+                    var sbTitle = new System.Text.StringBuilder(256);
+                    GetWindowText(hWnd, sbTitle, 256);
+                    string text = sbTitle.ToString().Trim();
+
+                    string author = "Telegram";
+                    string body = "Новое сообщение";
+
+                    if (!string.IsNullOrWhiteSpace(text) && text.Contains(": "))
+                    {
+                        var parts = text.Split(new[] { ": " }, 2, StringSplitOptions.None);
+                        author = parts[0];
+                        body = parts[1];
+                    }
+                    else if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        body = text;
+                    }
+
+                    Console.Error.WriteLine($"[TelegramPopupInterceptor] Suppressed popup and redirected to Dynamic Island: {author} - {body}");
+
+                    OnNotificationReceived?.Invoke(new
+                    {
+                        id = $"tg-popup-{now.Ticks}",
+                        app = "telegram",
+                        appName = procName.Contains("ayu") ? "Telegram (AyuGram)" : "Telegram",
+                        author = author,
+                        title = "Telegram",
+                        message = body,
+                        timestamp = now.ToString("o"),
+                        scheme = "tg://"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[OnTelegramWinEvent Error]: {ex.Message}");
+            }
+        }
+
         public static async Task StartAsync()
         {
+            // Start Telegram popup window interceptor on a dedicated STA thread with message loop
+            var hookThread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    _tgWinEventDelegate = new WinEventDelegate(OnTelegramWinEvent);
+                    _tgHookId = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, IntPtr.Zero, _tgWinEventDelegate, 0, 0, WINEVENT_OUTOFCONTEXT);
+                    Console.Error.WriteLine("[NotificationListener] Telegram popup window hook installed.");
+                    System.Windows.Forms.Application.Run();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[NotificationListener Hook Error]: {ex.Message}");
+                }
+            })
+            { IsBackground = true };
+            hookThread.SetApartmentState(System.Threading.ApartmentState.STA);
+            hookThread.Start();
+
             try
             {
                 _listener = UserNotificationListener.Current;
@@ -129,22 +293,57 @@ namespace DynislCore
                 try
                 {
                     string appName = "Приложение";
+                    string aumid = "";
                     try
                     {
                         if (n.AppInfo?.DisplayInfo?.DisplayName != null)
                         {
                             appName = n.AppInfo.DisplayInfo.DisplayName;
                         }
+                        aumid = n.AppInfo?.Id ?? "";
                     }
                     catch { }
 
-                    string appKey = appName.ToLowerInvariant();
+                    string combinedKey = $"{appName} {aumid}".ToLowerInvariant();
                     string appType = "system";
-                    if (appKey.Contains("discord")) appType = "discord";
-                    else if (appKey.Contains("telegram") || appKey.Contains("tg")) appType = "telegram";
-                    else if (appKey.Contains("vk") || appKey.Contains("вконтакте")) appType = "vk";
-                    else if (appKey.Contains("whatsapp")) appType = "whatsapp";
-                    else if (appKey.Contains("chrome") || appKey.Contains("brave") || appKey.Contains("edge") || appKey.Contains("browser") || appKey.Contains("яндекс")) appType = "browser";
+                    string? scheme = null;
+
+                    if (combinedKey.Contains("screensketch") || combinedKey.Contains("screenclip") || combinedKey.Contains("snipping") || combinedKey.Contains("ножниц") || combinedKey.Contains("снимок") || combinedKey.Contains("фрагмент"))
+                    {
+                        appType = "screenshot";
+                        appName = "Снимок экрана";
+                        scheme = "ms-screensketch:";
+                        _lastScreenshotNotificationTime = DateTime.UtcNow;
+                    }
+                    else if (combinedKey.Contains("ayu") || combinedKey.Contains("telegram") || combinedKey.Contains("tg") || combinedKey.Contains("telegraph"))
+                    {
+                        appType = "telegram";
+                        appName = combinedKey.Contains("ayu") ? "Telegram (AyuGram)" : "Telegram";
+                        scheme = "tg://";
+                    }
+                    else if (combinedKey.Contains("discord"))
+                    {
+                        appType = "discord";
+                        appName = "Discord";
+                        scheme = "discord://";
+                    }
+                    else if (combinedKey.Contains("vk") || combinedKey.Contains("вконтакте"))
+                    {
+                        appType = "vk";
+                        appName = "ВКонтакте";
+                        scheme = "https://vk.com";
+                    }
+                    else if (combinedKey.Contains("whatsapp"))
+                    {
+                        appType = "whatsapp";
+                        appName = "WhatsApp";
+                        scheme = "whatsapp://";
+                    }
+                    else if (combinedKey.Contains("chrome") || combinedKey.Contains("brave") || combinedKey.Contains("edge") || combinedKey.Contains("browser") || combinedKey.Contains("яндекс") || combinedKey.Contains("opera") || combinedKey.Contains("firefox"))
+                    {
+                        appType = "browser";
+                        if (appName == "Приложение") appName = "Браузер";
+                    }
 
                     string title = appName;
                     string body = "";
@@ -233,7 +432,9 @@ namespace DynislCore
                         author = title,
                         title = appName,
                         message = body,
-                        timestamp = DateTime.UtcNow.ToString("o")
+                        timestamp = DateTime.UtcNow.ToString("o"),
+                        aumid = aumid,
+                        scheme = scheme
                     });
 
                     // Suppress native Windows bottom-right popup by dismissing it AFTER extracting payload

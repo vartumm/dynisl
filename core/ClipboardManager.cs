@@ -148,11 +148,70 @@ namespace DynislCore
                             if (_history.Count > 60) _history.RemoveAt(_history.Count - 1);
                         }
                         OnClipboardChanged?.Invoke(GetHistory());
+
+                        // Save screenshot to disk so it can be directly opened/viewed
+                        string savedFile = SaveScreenshot(img);
+
+                        // Emit dynamic island interactive screenshot toast
+                        NotificationListener.EmitScreenshotNotification(base64, savedFile);
                     }
                 }
             }
             catch
             {
+            }
+        }
+
+        public static string SaveScreenshot(Image img)
+        {
+            try
+            {
+                string screenshotsDir = GetScreenshotsDirectory();
+                string filePath = Path.Combine(screenshotsDir, $"Screenshot_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+                img.Save(filePath, ImageFormat.Png);
+                return filePath;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SaveScreenshot Error]: {ex.Message}");
+                try
+                {
+                    string fallback = Path.Combine(Path.GetTempPath(), $"Screenshot_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+                    img.Save(fallback, ImageFormat.Png);
+                    return fallback;
+                }
+                catch { return ""; }
+            }
+        }
+
+        public static string GetScreenshotsDirectory()
+        {
+            try
+            {
+                string oneDrive = Environment.GetEnvironmentVariable("OneDrive") ?? "";
+                if (!string.IsNullOrEmpty(oneDrive))
+                {
+                    string od1 = Path.Combine(oneDrive, "Изображения", "Screenshots");
+                    if (Directory.Exists(od1)) return od1;
+                    string od2 = Path.Combine(oneDrive, "Изображения", "Снимки экрана");
+                    if (Directory.Exists(od2)) return od2;
+                    string od3 = Path.Combine(oneDrive, "Pictures", "Screenshots");
+                    if (Directory.Exists(od3)) return od3;
+                }
+
+                string myPics = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+                string p1 = Path.Combine(myPics, "Screenshots");
+                if (Directory.Exists(p1)) return p1;
+                string p2 = Path.Combine(myPics, "Снимки экрана");
+                if (Directory.Exists(p2)) return p2;
+
+                string defaultDir = Path.Combine(myPics, "Screenshots");
+                Directory.CreateDirectory(defaultDir);
+                return defaultDir;
+            }
+            catch
+            {
+                return Path.GetTempPath();
             }
         }
 

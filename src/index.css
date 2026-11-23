@@ -77,6 +77,47 @@ html, body, #root {
   }
 }
 
+.compact-karaoke-line-anim {
+  animation: compact-lyric-slide 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Pulsing Dots for Intro / Interlude */
+@keyframes karaoke-dot-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+.karaoke-pulsing-dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.8);
+}
+
+.karaoke-pulsing-dot.dot-1 {
+  animation: karaoke-dot-pulse 1.2s infinite ease-in-out;
+}
+
+.karaoke-pulsing-dot.dot-2 {
+  animation: karaoke-dot-pulse 1.2s infinite ease-in-out 0.25s;
+}
+
+.karaoke-pulsing-dot.dot-3 {
+  animation: karaoke-dot-pulse 1.2s infinite ease-in-out 0.5s;
+}
+
+.compact-karaoke-root:hover .compact-karaoke-line-anim {
+  filter: brightness(1.1);
+}
+
 /* Horizontal Marquee Scroll for Long Lyrics in Compact Mode */
 @keyframes marquee-scroll {
   0%, 20% {

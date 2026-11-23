@@ -17,7 +17,9 @@ export default function MainIsland({
   theme,
   musicInfo,
   lyricsData,
+  karaokeState,
   currentLyricLine,
+  currentTimeSec,
   clipboardItems,
   absorbedFiles,
   currentNotification,
@@ -25,6 +27,7 @@ export default function MainIsland({
   layoutFixData,
   onDismissNotification,
   onDismissLayoutFix,
+  onActivateNotification,
   onClearNotifications,
   onRemoveNotification,
   onPlayPause,
@@ -60,12 +63,14 @@ export default function MainIsland({
     height = 40;
     borderRadius = '20px';
   } else if (activeView === 'idle') {
-    if (musicInfo?.HasSession && currentLyricLine && !musicInfo?.IsAd) {
-      width = 410; // Extra room for moving lyrics
-      height = 38;
-    } else if (musicInfo?.HasSession && musicInfo?.Title) {
-      width = 310;
-      height = 38;
+    if (musicInfo?.HasSession && !musicInfo?.IsAd) {
+      if (karaokeState?.hasLyrics || currentLyricLine || isMusicPlaying) {
+        width = 470; // Generous comfortable width for live karaoke in collapsed view
+        height = 40;
+      } else {
+        width = 330;
+        height = 40;
+      }
     } else {
       width = 250;
       height = 38;
@@ -231,6 +236,7 @@ export default function MainIsland({
               onDismissNotification();
               setActiveView('notifications');
             }}
+            onActivate={onActivateNotification}
             theme={theme}
           />
         ) : layoutFixData ? (
@@ -241,17 +247,26 @@ export default function MainIsland({
         ) : activeView === 'idle' ? (
           <IdleView
             settings={settings}
-            onOpenView={(view) => setActiveView(view)}
+            onOpenView={(view) => {
+              if (view === 'lyrics') {
+                setActiveView('music');
+                setIsLyricsOpen(true);
+              } else {
+                setActiveView(view);
+              }
+            }}
             theme={theme}
             isMusicPlaying={isMusicPlaying}
             musicInfo={musicInfo}
             currentLyricLine={currentLyricLine}
+            karaokeState={karaokeState}
             notificationsCount={notifications?.length || 0}
           />
         ) : activeView === 'music' ? (
           <MusicPlayerView
             musicInfo={musicInfo}
             lyricsData={lyricsData}
+            currentTimeSec={currentTimeSec}
             onPlayPause={onPlayPause}
             onNext={onNext}
             onPrev={onPrev}
@@ -287,6 +302,7 @@ export default function MainIsland({
             notifications={notifications}
             onClearAll={onClearNotifications}
             onRemoveItem={onRemoveNotification}
+            onActivateItem={onActivateNotification}
             onClose={() => setActiveView('idle')}
             theme={theme}
           />

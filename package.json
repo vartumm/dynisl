@@ -10,6 +10,7 @@
     "obfuscate": "node scripts/obfuscate.js",
     "restore": "node scripts/restore.js",
     "build:core": "cd core && D:\\dotnet\\dotnet.exe publish DynislCore.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o publish",
+    "pack:unpacked": "python scripts/pack_unpacked.py",
     "dist": "npm run build && npm run obfuscate && electron-builder --win && npm run restore"
   },
   "build": {

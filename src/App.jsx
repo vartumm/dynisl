@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import MainIsland from './components/MainIsland';
 import CallMiniIsland from './components/CallMiniIsland';
 import { ISLAND_THEMES } from './styles/islandThemes';
-import { fetchLyrics, getActiveLineIndex } from './services/lyricsService';
+import { fetchLyrics, getActiveLineIndex, getKaraokeState } from './services/lyricsService';
 import { notificationManager } from './services/notificationService';
+import { getAppMeta } from './components/NotificationToast';
 
 export default function App() {
   // Settings
@@ -95,6 +96,32 @@ export default function App() {
     } catch {}
   };
 
+  const handleActivateNotification = (notif) => {
+    if (!notif) return;
+    const meta = getAppMeta(notif.app, notif.appName);
+    const scheme = notif.scheme || meta.scheme;
+
+    if (notif.filePath) {
+      window.dynislAPI?.openPath?.(notif.filePath);
+    }
+
+    window.dynislAPI?.activateApp?.({
+      app: notif.app,
+      scheme,
+      aumid: notif.aumid,
+      filePath: notif.filePath
+    });
+
+    if (scheme && !notif.filePath) {
+      window.dynislAPI?.openExternal?.(scheme);
+    }
+
+    setCurrentNotification(null);
+    if (activeView === 'notifications') {
+      setActiveView('idle');
+    }
+  };
+
   const handleRemoveNotification = (id) => {
     setNotifications((prev) => {
       const updated = prev.filter((n) => n.id !== id);
@@ -126,30 +153,60 @@ export default function App() {
     }
   }, [musicInfo?.Title, musicInfo?.Artist, musicInfo?.DurationMs, musicInfo?.IsAd]);
 
-  // Interpolate music position for compact lyrics
-  useEffect(() => {
-    setCurrentPosMs(musicInfo?.PositionMs || 0);
-  }, [musicInfo?.PositionMs]);
+  // High-precision sub-second timekeeping engine
+  const anchorRef = useRef({
+    posMs: 0,
+    perfTime: performance.now(),
+    status: 'Stopped',
+    durationMs: 0
+  });
 
   useEffect(() => {
-    if (musicInfo?.Status !== 'Playing' || musicInfo?.IsAd) return;
-    const interval = setInterval(() => {
-      setCurrentPosMs((prev) => {
-        if (musicInfo?.DurationMs > 0 && prev >= musicInfo.DurationMs) return prev;
-        return prev + 500;
-      });
-    }, 500);
-    return () => clearInterval(interval);
-  }, [musicInfo?.Status, musicInfo?.DurationMs, musicInfo?.IsAd]);
+    if (!musicInfo) return;
+    const newPos = musicInfo.PositionMs || 0;
+    const now = performance.now();
 
-  // Compute active lyric line for compact mode (with +0.2s vocal calibration)
-  let currentLyricLine = '';
-  if (lyricsData?.synced && lyricsData?.lines?.length > 0 && !musicInfo?.IsAd) {
-    const activeIdx = getActiveLineIndex(lyricsData.lines, (currentPosMs / 1000) + 0.2);
-    if (activeIdx >= 0 && lyricsData.lines[activeIdx]) {
-      currentLyricLine = lyricsData.lines[activeIdx].text;
+    const prevEstimated = anchorRef.current.status === 'Playing'
+      ? anchorRef.current.posMs + (now - anchorRef.current.perfTime)
+      : anchorRef.current.posMs;
+
+    const diff = Math.abs(newPos - prevEstimated);
+
+    // Resync anchor when deviation exceeds 400ms or status changes
+    if (diff > 400 || musicInfo.Status !== anchorRef.current.status) {
+      anchorRef.current = {
+        posMs: newPos,
+        perfTime: now,
+        status: musicInfo.Status,
+        durationMs: musicInfo.DurationMs || 0
+      };
+      setCurrentPosMs(newPos);
     }
-  }
+  }, [musicInfo?.PositionMs, musicInfo?.Status, musicInfo?.DurationMs]);
+
+  // High-frequency continuous tick (35ms ~ 28fps) for butter-smooth position tracking
+  useEffect(() => {
+    if (musicInfo?.Status !== 'Playing' || musicInfo?.IsAd) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const { posMs, perfTime, durationMs } = anchorRef.current;
+      const elapsed = performance.now() - perfTime;
+      let calculated = posMs + elapsed;
+      if (durationMs > 0 && calculated > durationMs) {
+        calculated = durationMs;
+      }
+      setCurrentPosMs(calculated);
+    }, 35);
+
+    return () => clearInterval(interval);
+  }, [musicInfo?.Status, musicInfo?.IsAd]);
+
+  // Compute comprehensive karaoke state (with +0.15s vocal calibration)
+  const currentTimeSec = (currentPosMs / 1000) + 0.15;
+  const karaokeState = getKaraokeState(lyricsData, currentTimeSec);
+  const currentLyricLine = karaokeState.currentLine;
 
   // IPC Event listener from DynislCore
   useEffect(() => {
@@ -347,13 +404,16 @@ export default function App() {
           theme={theme}
           musicInfo={musicInfo}
           lyricsData={lyricsData}
+          karaokeState={karaokeState}
           currentLyricLine={currentLyricLine}
+          currentTimeSec={currentTimeSec}
           clipboardItems={clipboardItems}
           absorbedFiles={absorbedFiles}
           currentNotification={currentNotification}
           notifications={notifications}
           onClearNotifications={handleClearAllNotifications}
           onRemoveNotification={handleRemoveNotification}
+          onActivateNotification={handleActivateNotification}
           layoutFixData={layoutFixData}
           onDismissNotification={() => setCurrentNotification(null)}
           onDismissLayoutFix={() => setLayoutFixData(null)}

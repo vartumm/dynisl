@@ -19,6 +19,7 @@ namespace DynislCore
         public double DurationMs { get; set; } = 0;
         public string AppId { get; set; } = "";
         public bool IsAd { get; set; } = false;
+        public long Timestamp { get; set; } = 0;
     }
 
     public class MediaManager
@@ -39,12 +40,12 @@ namespace DynislCore
                     _manager.SessionsChanged += async (s, e) => await UpdateSessionAsync();
                     await UpdateSessionAsync();
 
-                    // Periodic background refresh (800ms) to ensure state stays 100% in sync
+                    // Periodic background refresh (400ms) to ensure state stays 100% in sync
                     _ = Task.Run(async () =>
                     {
                         while (true)
                         {
-                            await Task.Delay(800);
+                            await Task.Delay(400);
                             try
                             {
                                 await RefreshMediaStateAsync();
@@ -183,6 +184,31 @@ namespace DynislCore
                     catch { }
                 }
 
+                double posMs = 0;
+                double durationMs = 0;
+                if (timeline != null)
+                {
+                    durationMs = timeline.EndTime.TotalMilliseconds;
+                    var basePos = timeline.Position;
+                    if (status == "Playing" && timeline.LastUpdatedTime != default)
+                    {
+                        var elapsed = DateTimeOffset.UtcNow - timeline.LastUpdatedTime;
+                        if (elapsed > TimeSpan.Zero && elapsed < TimeSpan.FromHours(2))
+                        {
+                            basePos += elapsed;
+                        }
+                    }
+
+                    if (durationMs > 0 && basePos.TotalMilliseconds > durationMs)
+                    {
+                        posMs = durationMs;
+                    }
+                    else
+                    {
+                        posMs = Math.Max(0, basePos.TotalMilliseconds);
+                    }
+                }
+
                 CurrentMedia = new MediaInfo
                 {
                     HasSession = true,
@@ -191,10 +217,11 @@ namespace DynislCore
                     Album = mediaProps?.AlbumTitle ?? "",
                     ThumbnailBase64 = thumb,
                     Status = status,
-                    PositionMs = timeline?.Position.TotalMilliseconds ?? 0,
-                    DurationMs = timeline?.EndTime.TotalMilliseconds ?? 0,
+                    PositionMs = posMs,
+                    DurationMs = durationMs,
                     AppId = _currentSession.SourceAppUserModelId ?? "",
-                    IsAd = isAd
+                    IsAd = isAd,
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 };
 
                 OnMediaChanged?.Invoke(CurrentMedia);
