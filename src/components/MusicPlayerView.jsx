@@ -74,6 +74,7 @@ export default function MusicPlayerView({
           trackTitle={musicInfo?.Title || 'Трек'}
           trackArtist={musicInfo?.Artist || 'Исполнитель'}
           theme={theme}
+          isMusicPlaying={musicInfo?.Status === 'Playing'}
         />
       ) : (
         <div

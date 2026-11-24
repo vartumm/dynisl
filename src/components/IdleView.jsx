@@ -123,7 +123,7 @@ export default function IdleView({
       </div>
 
       {/* Middle section: Precision Compact Karaoke View */}
-      {hasMusic && !musicInfo?.IsAd ? (
+      {hasMusic ? (
         <CompactKaraokeView
           karaokeState={karaokeState}
           musicInfo={musicInfo}

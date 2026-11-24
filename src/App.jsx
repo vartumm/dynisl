@@ -153,59 +153,67 @@ export default function App() {
     }
   }, [musicInfo?.Title, musicInfo?.Artist, musicInfo?.DurationMs, musicInfo?.IsAd]);
 
-  // High-precision sub-second timekeeping engine
+  // High-precision sub-second timekeeping engine with dynamic tempo & pause tracking
   const anchorRef = useRef({
     posMs: 0,
     perfTime: performance.now(),
     status: 'Stopped',
-    durationMs: 0
+    durationMs: 0,
+    playbackRate: 1.0
   });
 
   useEffect(() => {
     if (!musicInfo) return;
     const newPos = musicInfo.PositionMs || 0;
+    const rate = musicInfo.PlaybackRate || 1.0;
     const now = performance.now();
 
-    const prevEstimated = anchorRef.current.status === 'Playing'
-      ? anchorRef.current.posMs + (now - anchorRef.current.perfTime)
+    const isPlaying = musicInfo.Status === 'Playing';
+    const wasPlaying = anchorRef.current.status === 'Playing';
+
+    const prevEstimated = wasPlaying
+      ? anchorRef.current.posMs + (now - anchorRef.current.perfTime) * (anchorRef.current.playbackRate || 1.0)
       : anchorRef.current.posMs;
 
     const diff = Math.abs(newPos - prevEstimated);
 
-    // Resync anchor when deviation exceeds 400ms or status changes
-    if (diff > 400 || musicInfo.Status !== anchorRef.current.status) {
+    // Resync anchor when deviation exceeds 450ms, tempo changes, or status changes (playing/paused)
+    if (diff > 450 || musicInfo.Status !== anchorRef.current.status || Math.abs(rate - (anchorRef.current.playbackRate || 1.0)) > 0.05) {
       anchorRef.current = {
         posMs: newPos,
         perfTime: now,
         status: musicInfo.Status,
-        durationMs: musicInfo.DurationMs || 0
+        durationMs: musicInfo.DurationMs || 0,
+        playbackRate: rate
       };
       setCurrentPosMs(newPos);
     }
-  }, [musicInfo?.PositionMs, musicInfo?.Status, musicInfo?.DurationMs]);
+  }, [musicInfo?.PositionMs, musicInfo?.Status, musicInfo?.DurationMs, musicInfo?.PlaybackRate]);
 
-  // High-frequency continuous tick (35ms ~ 28fps) for butter-smooth position tracking
+  // High-frequency continuous tick (30ms ~ 33fps) for butter-smooth position tracking
   useEffect(() => {
     if (musicInfo?.Status !== 'Playing' || musicInfo?.IsAd) {
       return;
     }
 
     const interval = setInterval(() => {
-      const { posMs, perfTime, durationMs } = anchorRef.current;
-      const elapsed = performance.now() - perfTime;
+      const { posMs, perfTime, durationMs, playbackRate } = anchorRef.current;
+      const rate = playbackRate || 1.0;
+      const elapsed = (performance.now() - perfTime) * rate;
       let calculated = posMs + elapsed;
       if (durationMs > 0 && calculated > durationMs) {
         calculated = durationMs;
       }
       setCurrentPosMs(calculated);
-    }, 35);
+    }, 30);
 
     return () => clearInterval(interval);
-  }, [musicInfo?.Status, musicInfo?.IsAd]);
+  }, [musicInfo?.Status, musicInfo?.IsAd, musicInfo?.PlaybackRate]);
 
-  // Compute comprehensive karaoke state (with +0.15s vocal calibration)
-  const currentTimeSec = (currentPosMs / 1000) + 0.15;
-  const karaokeState = getKaraokeState(lyricsData, currentTimeSec);
+  // Compute comprehensive karaoke state (exact natural playback time without false offsets)
+  const isMusicPlaying = musicInfo?.Status === 'Playing';
+  const currentTimeSec = currentPosMs / 1000;
+  const karaokeState = getKaraokeState(lyricsData, currentTimeSec, isMusicPlaying);
   const currentLyricLine = karaokeState.currentLine;
 
   // IPC Event listener from DynislCore
@@ -314,8 +322,6 @@ export default function App() {
       ? themeObj.style(settings.customColor, settings.customAccent)
       : themeObj.style
   };
-
-  const isMusicPlaying = musicInfo?.Status === 'Playing';
 
   // Commands to Core
   const handlePlayPause = () => window.dynislAPI?.sendCommand('media_play_pause');

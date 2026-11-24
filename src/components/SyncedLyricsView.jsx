@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { getActiveLineIndex } from '../services/lyricsService';
-import { Mic, Search, ChevronUp, Music } from 'lucide-react';
+import { Mic, Search, ChevronUp, Music, Pause } from 'lucide-react';
 
 export default function SyncedLyricsView({
   lyricsData,
@@ -9,7 +9,8 @@ export default function SyncedLyricsView({
   onClose,
   trackTitle,
   trackArtist,
-  theme
+  theme,
+  isMusicPlaying = true
 }) {
   const scrollContainerRef = useRef(null);
   const activeLineRef = useRef(null);
@@ -63,18 +64,18 @@ export default function SyncedLyricsView({
               width: '24px',
               height: '24px',
               borderRadius: '50%',
-              background: 'rgba(56, 189, 248, 0.15)',
-              color: theme?.accent || '#38bdf8',
+              background: isMusicPlaying ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.12)',
+              color: isMusicPlaying ? (theme?.accent || '#38bdf8') : 'rgba(255, 255, 255, 0.7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
           >
-            <Mic size={14} />
+            {isMusicPlaying ? <Mic size={14} /> : <Pause size={12} />}
           </div>
           <div>
             <div style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '-0.2px' }}>
-              Текст песни (Караоке)
+              Текст песни (Караоке) {!isMusicPlaying && <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontWeight: '500', fontSize: '11px' }}>• Пауза</span>}
             </div>
             <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.5)' }}>
               {trackArtist} — {trackTitle}

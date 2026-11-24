@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Mic, Music2, Sparkles } from 'lucide-react';
+import { Mic, Music2, Sparkles, Pause } from 'lucide-react';
 
 export default function CompactKaraokeView({
   karaokeState,
@@ -11,10 +11,12 @@ export default function CompactKaraokeView({
   const textContainerRef = useRef(null);
   const textMeasureRef = useRef(null);
   const [scrollX, setScrollX] = useState(0);
+  const [isOverflowing, setIsOverflowing] = useState(false);
 
   const {
     hasLyrics,
     isSynced,
+    isPaused: statePaused,
     mode,
     currentLine,
     nextLine,
@@ -23,6 +25,7 @@ export default function CompactKaraokeView({
   } = karaokeState || {
     hasLyrics: false,
     isSynced: false,
+    isPaused: false,
     mode: 'none',
     currentLine: '',
     nextLine: '',
@@ -30,35 +33,71 @@ export default function CompactKaraokeView({
     progress: 0
   };
 
+  const isPaused = statePaused ?? (musicInfo?.Status !== 'Playing');
   const accentColor = theme?.accent || '#38bdf8';
   const fillPercent = Math.min(100, Math.max(0, Math.round(progress * 100)));
 
-  // Determine optimal font size based on text length to keep it calm and avoid jittery scrolling
-  let fontSize = '12.5px';
-  if (currentLine && currentLine.length > 45) {
-    fontSize = '11px';
-  } else if (currentLine && currentLine.length > 32) {
-    fontSize = '11.8px';
+  // Scaled dynamic font size to ensure high readability with zero awkward clipping
+  let fontSize = '12.8px';
+  if (currentLine && currentLine.length > 46) {
+    fontSize = '10.5px';
+  } else if (currentLine && currentLine.length > 34) {
+    fontSize = '11.4px';
+  } else if (currentLine && currentLine.length > 24) {
+    fontSize = '12.2px';
   }
 
-  // Smooth gentle pan only if text genuinely exceeds available viewport
+  // Measure text and handle gentle pan without EVER cutting off the start of the line!
   useEffect(() => {
+    // When currentLine changes, immediately reset scroll to 0 so start of new line is instantly visible
+    setScrollX(0);
+
     if (textMeasureRef.current && textContainerRef.current && mode === 'singing') {
       const textWidth = textMeasureRef.current.scrollWidth;
       const viewportWidth = textContainerRef.current.clientWidth;
       const diff = textWidth - viewportWidth;
 
-      if (diff > 8) {
-        // Keep in place for first 15%, then gently glide, stay at end for last 15%
-        const factor = Math.min(1, Math.max(0, (progress - 0.15) / 0.7));
-        setScrollX(Math.round(diff * factor));
+      if (diff > 6) {
+        setIsOverflowing(true);
+        // Keep character 0 firmly visible for first 30% of the line!
+        // Then smoothly pan to reveal end from 30% to 85%
+        if (progress > 0.3) {
+          const factor = Math.min(1, Math.max(0, (progress - 0.3) / 0.55));
+          setScrollX(Math.round(diff * factor));
+        } else {
+          setScrollX(0);
+        }
       } else {
+        setIsOverflowing(false);
         setScrollX(0);
       }
     } else {
+      setIsOverflowing(false);
       setScrollX(0);
     }
   }, [currentLine, progress, mode]);
+
+  // Ad banner handling
+  if (musicInfo?.IsAd) {
+    return (
+      <div
+        className="compact-karaoke-root"
+        style={{
+          flex: 1,
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          color: 'rgba(255, 255, 255, 0.75)',
+          fontSize: '12px',
+          fontWeight: '600'
+        }}
+      >
+        <span>📢 Реклама</span>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -80,9 +119,13 @@ export default function CompactKaraokeView({
         e.stopPropagation();
         onOpenLyrics();
       }}
-      title={nextLine ? `Караоке • Далее: "${nextLine}" (Клик — открыть полный текст)` : 'Караоке (Клик — открыть полный текст)'}
+      title={
+        isPaused
+          ? (nextLine ? `Караоке (Пауза) • Далее: "${nextLine}" (Клик — открыть полный текст)` : 'Караоке (Пауза) • Клик — открыть полный текст')
+          : (nextLine ? `Караоке • Далее: "${nextLine}" (Клик — открыть полный текст)` : 'Караоке (Клик — открыть полный текст)')
+      }
     >
-      {/* 1. ACTIVE SINGING: DUAL-LAYER REAL KARAOKE HIGHLIGHT (NO CLIP ARTIFACTS) */}
+      {/* 1. ACTIVE SINGING: DUAL-LAYER HIGHLIGHT WITH ZERO CLIPPING */}
       {mode === 'singing' && currentLine ? (
         <div
           key={`singing-${currentLine}`}
@@ -91,7 +134,7 @@ export default function CompactKaraokeView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '7px',
+            gap: '8px',
             width: '100%',
             height: '100%',
             overflow: 'hidden',
@@ -99,7 +142,7 @@ export default function CompactKaraokeView({
             lineHeight: 1
           }}
         >
-          {/* Glowing Microphone Indicator */}
+          {/* Glowing Microphone or Paused Indicator */}
           <div
             style={{
               display: 'flex',
@@ -108,16 +151,21 @@ export default function CompactKaraokeView({
               width: '18px',
               height: '18px',
               borderRadius: '50%',
-              background: 'rgba(56, 189, 248, 0.15)',
+              background: isPaused ? 'rgba(255, 255, 255, 0.12)' : 'rgba(56, 189, 248, 0.15)',
               flexShrink: 0,
-              boxShadow: `0 0 10px ${accentColor}44`,
-              transform: 'translateY(-0.5px)'
+              boxShadow: isPaused ? 'none' : `0 0 10px ${accentColor}44`,
+              transform: 'translateY(-0.5px)',
+              transition: 'background 0.2s ease, box-shadow 0.2s ease'
             }}
           >
-            <Mic size={11} color={accentColor} />
+            {isPaused ? (
+              <Pause size={10} color="rgba(255, 255, 255, 0.75)" />
+            ) : (
+              <Mic size={11} color={accentColor} />
+            )}
           </div>
 
-          {/* Text Viewport */}
+          {/* Text Viewport: aligned to flex-start when overflowing so START of line is NEVER clipped! */}
           <div
             ref={textContainerRef}
             style={{
@@ -127,20 +175,21 @@ export default function CompactKaraokeView({
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: isOverflowing ? 'flex-start' : 'center',
               lineHeight: 1
             }}
           >
-            {/* Moving wrapper (only shifts if text length genuinely exceeds container) */}
+            {/* Moving wrapper: pans to the right smoothly when text genuinely overflows */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 height: '100%',
                 transform: `translateX(-${scrollX}px)`,
-                transition: 'transform 0.15s ease-out',
+                transition: (isPaused || scrollX === 0) ? 'none' : 'transform 0.12s linear',
                 position: 'relative',
-                lineHeight: 1
+                lineHeight: 1,
+                whiteSpace: 'nowrap'
               }}
             >
               {/* Reference wrapper containing both layers */}
@@ -162,7 +211,7 @@ export default function CompactKaraokeView({
                     fontWeight: '700',
                     letterSpacing: '-0.2px',
                     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                    color: 'rgba(255, 255, 255, 0.42)',
+                    color: isPaused ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.45)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     lineHeight: 1,
@@ -183,7 +232,7 @@ export default function CompactKaraokeView({
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     pointerEvents: 'none',
-                    transition: 'width 0.08s linear',
+                    transition: isPaused ? 'none' : 'width 0.08s linear',
                     display: 'flex',
                     alignItems: 'center',
                     lineHeight: 1
@@ -244,14 +293,14 @@ export default function CompactKaraokeView({
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', lineHeight: 1 }}>
             <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontWeight: '600', transform: 'translateY(-1px)', display: 'inline-flex' }}>
-              Вступление
+              {isPaused ? 'Вступление (Пауза)' : 'Вступление'}
             </span>
 
             {/* Pulsing rhythmic dots */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px', transform: 'translateY(-0.5px)' }}>
-              <span className="karaoke-pulsing-dot dot-1" />
-              <span className="karaoke-pulsing-dot dot-2" />
-              <span className="karaoke-pulsing-dot dot-3" />
+              <span className="karaoke-pulsing-dot dot-1" style={{ animationPlayState: isPaused ? 'paused' : 'running' }} />
+              <span className="karaoke-pulsing-dot dot-2" style={{ animationPlayState: isPaused ? 'paused' : 'running' }} />
+              <span className="karaoke-pulsing-dot dot-3" style={{ animationPlayState: isPaused ? 'paused' : 'running' }} />
             </div>
 
             {countdown > 0 && (
@@ -291,9 +340,13 @@ export default function CompactKaraokeView({
             lineHeight: 1
           }}
         >
-          <Sparkles size={11} color={accentColor} style={{ transform: 'translateY(-0.5px)' }} />
+          {isPaused ? (
+            <Pause size={10} color="rgba(255, 255, 255, 0.75)" style={{ transform: 'translateY(-0.5px)' }} />
+          ) : (
+            <Sparkles size={11} color={accentColor} style={{ transform: 'translateY(-0.5px)' }} />
+          )}
           <span style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.85)', fontWeight: '600', transform: 'translateY(-1px)', display: 'inline-flex' }}>
-            ♪ Проигрыш ♪
+            {isPaused ? '♪ Проигрыш (Пауза) ♪' : '♪ Проигрыш ♪'}
           </span>
 
           {countdown > 0 && (
@@ -321,7 +374,7 @@ export default function CompactKaraokeView({
               style={{
                 fontSize: '11px',
                 color: 'rgba(255, 255, 255, 0.45)',
-                maxWidth: '130px',
+                maxWidth: '120px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 transform: 'translateY(-1px)',
@@ -332,31 +385,12 @@ export default function CompactKaraokeView({
             </span>
           )}
         </div>
-      ) : mode === 'outro' ? (
-        /* 4. OUTRO MODE */
-        <div
-          key="outro-mode"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            fontSize: '11.5px',
-            color: 'rgba(255, 255, 255, 0.7)',
-            fontWeight: '600',
-            height: '100%',
-            lineHeight: 1
-          }}
-        >
-          <Music2 size={11} color={accentColor} style={{ transform: 'translateY(-0.5px)' }} />
-          <span style={{ transform: 'translateY(-1px)', display: 'inline-flex' }}>♪ Завершение трека ♪</span>
-        </div>
       ) : (
-        /* 5. DEFAULT / NO LYRICS: Clean Title and Artist */
+        /* 4. CLEAN TRACK TITLE AND ARTIST FALLBACK */
         <div
           key="fallback-title"
           style={{
-            maxWidth: '240px',
+            maxWidth: '280px',
             overflow: 'hidden',
             textAlign: 'center',
             display: 'flex',
@@ -378,17 +412,19 @@ export default function CompactKaraokeView({
           >
             {musicInfo?.Title || 'Музыка'}
           </div>
-          <div
-            style={{
-              fontSize: '10px',
-              color: 'rgba(255, 255, 255, 0.5)',
-              whiteSpace: 'nowrap',
-              textOverflow: 'ellipsis',
-              overflow: 'hidden'
-            }}
-          >
-            {musicInfo?.Artist || ''}
-          </div>
+          {musicInfo?.Artist && (
+            <div
+              style={{
+                fontSize: '10px',
+                color: 'rgba(255, 255, 255, 0.5)',
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+                overflow: 'hidden'
+              }}
+            >
+              {musicInfo.Artist}
+            </div>
+          )}
         </div>
       )}
     </div>

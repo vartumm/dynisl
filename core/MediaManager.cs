@@ -17,6 +17,7 @@ namespace DynislCore
         public string Status { get; set; } = "Stopped"; // "Playing", "Paused", "Stopped"
         public double PositionMs { get; set; } = 0;
         public double DurationMs { get; set; } = 0;
+        public double PlaybackRate { get; set; } = 1.0;
         public string AppId { get; set; } = "";
         public bool IsAd { get; set; } = false;
         public long Timestamp { get; set; } = 0;
@@ -40,12 +41,12 @@ namespace DynislCore
                     _manager.SessionsChanged += async (s, e) => await UpdateSessionAsync();
                     await UpdateSessionAsync();
 
-                    // Periodic background refresh (400ms) to ensure state stays 100% in sync
+                    // Periodic background refresh (200ms) to ensure state stays 100% in sync
                     _ = Task.Run(async () =>
                     {
                         while (true)
                         {
-                            await Task.Delay(400);
+                            await Task.Delay(200);
                             try
                             {
                                 await RefreshMediaStateAsync();
@@ -168,7 +169,10 @@ namespace DynislCore
                 string title = mediaProps?.Title ?? "";
                 string artist = mediaProps?.Artist ?? "";
                 bool isAd = title.Equals("Advertisement", StringComparison.OrdinalIgnoreCase) ||
-                            (title.Equals("Spotify", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(artist));
+                            title.Equals("Реклама", StringComparison.OrdinalIgnoreCase) ||
+                            title.Contains("Advertisement", StringComparison.OrdinalIgnoreCase) ||
+                            (title.Equals("Spotify", StringComparison.OrdinalIgnoreCase) && (string.IsNullOrEmpty(artist) || artist.Equals("Spotify", StringComparison.OrdinalIgnoreCase))) ||
+                            (artist.Equals("Spotify", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(title));
 
                 string thumb = "";
                 if (mediaProps?.Thumbnail != null && !isAd)
@@ -184,6 +188,12 @@ namespace DynislCore
                     catch { }
                 }
 
+                double rate = 1.0;
+                if (playbackInfo != null && playbackInfo.PlaybackRate.HasValue && playbackInfo.PlaybackRate.Value > 0)
+                {
+                    rate = playbackInfo.PlaybackRate.Value;
+                }
+
                 double posMs = 0;
                 double durationMs = 0;
                 if (timeline != null)
@@ -195,7 +205,7 @@ namespace DynislCore
                         var elapsed = DateTimeOffset.UtcNow - timeline.LastUpdatedTime;
                         if (elapsed > TimeSpan.Zero && elapsed < TimeSpan.FromHours(2))
                         {
-                            basePos += elapsed;
+                            basePos += TimeSpan.FromMilliseconds(elapsed.TotalMilliseconds * rate);
                         }
                     }
 
@@ -219,6 +229,7 @@ namespace DynislCore
                     Status = status,
                     PositionMs = posMs,
                     DurationMs = durationMs,
+                    PlaybackRate = rate,
                     AppId = _currentSession.SourceAppUserModelId ?? "",
                     IsAd = isAd,
                     Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
